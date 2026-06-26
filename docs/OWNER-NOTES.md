@@ -73,6 +73,17 @@ All verified end-to-end in the browser.
 
 While doing this I also fixed a latent validation bug: ajv's type coercion was turning a `null` (e.g. "clear the price/photo") into `0`. All nullable fields now reject coercion correctly.
 
+## Round 3 — scan-driven workflows (2026-06-26)
+
+- **Create with a pre-printed label.** The new-object and new-place forms now have a **Scan label** button (opens the camera) so you can attach a label you printed earlier. It only accepts a blank label of the right kind; otherwise a new code is allocated as before. (Scanning a blank label from the Scan tab still jumps straight here with the code pre-filled.)
+- **Scan tab is now a move builder** matching your sketch: camera on top, two manual actions (**Pick place**, **Take out**), an action preview, and big **CONFIRM** / **CANCEL** buttons.
+  - Scan a **place** → it becomes the destination. Scan **objects** → they queue up. Order doesn't matter (object-first or place-first both work).
+  - **Nothing moves until you press CONFIRM.** CANCEL clears the batch.
+  - Works for several objects at once (scan, scan, scan → CONFIRM moves them all). "Take out" sets the destination to "out of storage".
+- When there's no camera (e.g. desktop), the scanner shows a manual code-entry box so the same flows still work.
+
+All verified end-to-end in the browser (scanned a place + two objects → CONFIRM moved both; scanned a blank label on the create form → object created with that exact code).
+
 ## Security review (multi-agent adversarial pass)
 
 I ran an 8-dimension adversarial security review (auth/session, SQL injection, input validation, uploads, headers/CSP, secrets/config, supply-chain/Docker, business-logic) and verified every finding against the actual code. **No critical or high issues. Zero SQL injection** (all queries parameterized). 20 lower-severity findings were confirmed; I fixed the meaningful ones:

@@ -1,17 +1,31 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { useItem, useCreateItem, useUpdateItem, usePlace } from '../lib/queries.ts';
-import { PhotoInput, Spinner, ErrorMsg } from '../components/ui.tsx';
+import { useItem, useCreateItem, useUpdateItem, usePlace, resolveCode } from '../lib/queries.ts';
+import { PhotoInput, Spinner, ErrorMsg, Modal } from '../components/ui.tsx';
 import { PlacePicker } from '../components/PlacePicker.tsx';
+import { QrScanner } from '../components/Scanner.tsx';
 
 export function ItemFormPage() {
   const params = useParams();
   const editId = params.id ? Number(params.id) : undefined;
   const isEdit = editId !== undefined;
   const [search] = useSearchParams();
-  const code = search.get('code') ?? undefined;
   const locParam = search.get('location') ? Number(search.get('location')) : null;
   const nav = useNavigate();
+  const [code, setCode] = useState<string | undefined>(search.get('code') ?? undefined);
+  const [scanning, setScanning] = useState(false);
+  const [scanErr, setScanErr] = useState<string | null>(null);
+
+  async function onScanLabel(raw: string) {
+    const c = raw.trim().toUpperCase();
+    const r = await resolveCode(c);
+    if (!r) return setScanErr(`${c} isn't a registered label.`);
+    if (r.entity_type !== 'item') return setScanErr('That label is for a place, not an object.');
+    if (r.status !== 'unassigned') return setScanErr('That label is already in use.');
+    setCode(c);
+    setScanErr(null);
+    setScanning(false);
+  }
 
   const existing = useItem(isEdit ? editId : 0);
   const create = useCreateItem();
@@ -71,9 +85,34 @@ export function ItemFormPage() {
         ‹ Back
       </Link>
       <h2 style={{ margin: 0 }}>{isEdit ? 'Edit object' : 'New object'}</h2>
-      {code && !isEdit && (
-        <div className="notice">
-          Label <b>{code}</b> will be attached to this object.
+      {!isEdit && (
+        <div className="card" style={{ marginBottom: 0 }}>
+          <div className="row">
+            <span className="grow small">
+              {code ? (
+                <>
+                  Label <b>{code}</b> will be attached.
+                </>
+              ) : (
+                <span className="muted">A new code will be allocated — or scan a pre-printed label.</span>
+              )}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setScanErr(null);
+                setScanning(true);
+              }}
+            >
+              Scan label
+            </button>
+            {code && (
+              <button type="button" className="btn danger" onClick={() => setCode(undefined)}>
+                Clear
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -136,6 +175,17 @@ export function ItemFormPage() {
           }}
           onClose={() => setPicking(false)}
         />
+      )}
+
+      {scanning && (
+        <Modal onClose={() => setScanning(false)}>
+          <h3 style={{ marginTop: 0 }}>Scan this object’s label</h3>
+          <QrScanner onCode={(c) => void onScanLabel(c)} />
+          {scanErr && <p className="error">{scanErr}</p>}
+          <button className="btn block" style={{ marginTop: 12 }} onClick={() => setScanning(false)}>
+            Cancel
+          </button>
+        </Modal>
       )}
     </div>
   );

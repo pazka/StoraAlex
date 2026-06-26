@@ -111,6 +111,16 @@ main.content { flex: 1; padding: 16px; max-width: 720px; width: 100%; margin: 0 
 
 .auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
 
+/* Scan / move builder */
+.preview-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-height: 56px; font-size: 15px; }
+.preview-box .ok { color: var(--ok); }
+.preview-box .warn { color: var(--accent); }
+.bigbtn { flex: 1; min-height: 64px; font-size: 18px; font-weight: 800; letter-spacing: 1px; border-radius: 14px; border: 2px solid var(--border); background: var(--surface-2); color: var(--text); }
+.bigbtn.confirm { background: var(--ok); color: #06241a; border-color: var(--ok); }
+.bigbtn.cancel { background: transparent; color: var(--danger); border-color: var(--danger); }
+.bigbtn:active { transform: translateY(1px); }
+.bigbtn:disabled { opacity: 0.4; pointer-events: none; }
+
 .bulkbar {
   position: fixed; left: 0; right: 0; bottom: 72px; z-index: 20;
   display: flex; gap: 8px; align-items: center;
