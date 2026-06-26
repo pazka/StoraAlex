@@ -176,6 +176,21 @@ describe('tags and packing list', () => {
   });
 });
 
+describe('place tagging', () => {
+  it('tags and untags a place', async () => {
+    const tagId = (await post('/api/tags', { name: 'Crate Event', kind: 'event' })).json().id;
+    const placeId = (await post('/api/places', { name: 'Crate Z', type: 'crate' })).json().id;
+
+    const tagged = await post(`/api/places/${placeId}/tags`, { tag_id: tagId });
+    expect(tagged.statusCode).toBe(200);
+    expect(tagged.json().tags.map((t: { id: number }) => t.id)).toContain(tagId);
+
+    const untagged = await app.inject(authed({ method: 'DELETE', url: `/api/places/${placeId}/tags/${tagId}` }));
+    expect(untagged.statusCode).toBe(200);
+    expect(untagged.json().tags).toHaveLength(0);
+  });
+});
+
 describe('hardening (from security review)', () => {
   it('rejects a typed code in the reserved label format (would poison the sequence)', async () => {
     const res = await post('/api/items', { name: 'Bad', code_value: 'OBJ-654321' });

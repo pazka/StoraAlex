@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { usePlace, useMovePlace } from '../lib/queries.ts';
+import { usePlace, useMovePlace, useTags, useTagPlace, useUntagPlace } from '../lib/queries.ts';
 import { Spinner, ErrorMsg, Thumb, Crumbs, StatusBadge } from '../components/ui.tsx';
 import { PlacePicker } from '../components/PlacePicker.tsx';
 import { TYPE_ICON } from './Places.tsx';
@@ -9,11 +9,17 @@ export function PlaceDetailPage() {
   const id = Number(useParams().id);
   const place = usePlace(id);
   const move = useMovePlace(id);
+  const tags = useTags();
+  const tagPlace = useTagPlace(id);
+  const untagPlace = useUntagPlace(id);
   const [picking, setPicking] = useState(false);
+  const [addingTag, setAddingTag] = useState(false);
 
   if (place.isLoading) return <Spinner />;
   if (place.error || !place.data) return <ErrorMsg error={place.error ?? 'not found'} />;
   const p = place.data;
+  const appliedTagIds = new Set(p.tags.map((t) => t.id));
+  const availableTags = (tags.data ?? []).filter((t) => !appliedTagIds.has(t.id));
 
   return (
     <div className="col">
@@ -52,6 +58,38 @@ export function PlaceDetailPage() {
         )}
       </div>
       <ErrorMsg error={move.error} />
+
+      <div className="card">
+        <div className="row" style={{ marginBottom: 8 }}>
+          <div className="small muted grow">Tags</div>
+          <button className="btn" style={{ minHeight: 30, padding: '4px 10px' }} onClick={() => setAddingTag((v) => !v)}>
+            + Tag
+          </button>
+        </div>
+        <div className="seg" style={{ marginBottom: 0 }}>
+          {p.tags.map((t) => (
+            <button key={t.id} className="chip" onClick={() => untagPlace.mutate(t.id)} title="Remove tag">
+              <span className="dot" style={t.color ? { background: t.color } : undefined} />
+              {t.name} ✕
+            </button>
+          ))}
+          {p.tags.length === 0 && <span className="muted small">No tags.</span>}
+        </div>
+        {addingTag && (
+          <div className="seg" style={{ marginTop: 10 }}>
+            {availableTags.map((t) => (
+              <button key={t.id} onClick={() => tagPlace.mutate(t.id)}>
+                + {t.name}
+              </button>
+            ))}
+            {availableTags.length === 0 && (
+              <span className="muted small">
+                No more tags. <Link to="/tags">Create one</Link>.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="card">
         <div className="row" style={{ marginBottom: 8 }}>

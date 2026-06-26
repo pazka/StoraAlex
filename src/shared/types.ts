@@ -100,6 +100,7 @@ export interface PlaceDetail extends Place {
   parent_path: PlaceBreadcrumb[];
   child_places: Place[];
   items: Item[];
+  tags: Tag[];
 }
 
 /** Result of resolving a scanned code. */

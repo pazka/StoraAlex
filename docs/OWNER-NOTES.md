@@ -41,14 +41,17 @@ Camera scanning needs a device with a camera + HTTPS (or localhost); on a deskto
 
 ---
 
-## Open questions for you (none block deployment)
+## Questions — resolved (2026-06-26)
 
-1. **Users.** It seeds **one** admin from env on first boot. Auth supports multiple users, but there's no "manage users" screen yet. Do you want one, or is single-user fine? (Add more users today by setting env + reseeding, or directly in the DB.)
-2. **Label stock.** The PDF prints an **A4 sheet, 24 labels (3×8)**. Is that your sticker sheet (Avery-style), or do you use a label-roll printer (Brother/DYMO)? That changes the PDF page size/layout — tell me your exact stock and I'll match it.
-3. **Taggable places?** Right now only **objects** can be tagged. SPEC left this open. Want places taggable too?
-4. **History retention.** Movement log is append-only and kept **forever** (recommended). Confirm that's what you want.
-5. **Google Sheet mirror (M7).** Deferred. When ready: create a Google Cloud project, a service account, share the target sheet with the service-account email, then set `SHEET_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON`. I'll wire the export/import then. Confirm tab naming (one spreadsheet, tabs: items / places / movements / codes / tags?).
-6. **Reverse proxy.** README has an nginx example for `storalex.hosh.it → 127.0.0.1:8080`. Are you on nginx, Caddy, or Traefik? I can give you an exact config for whichever.
+- **Label stock** → keep the **A4 sheet, 24-up (3×8)** PDF. (Tell me your exact Avery code / label W×H if you later want it tuned.)
+- **Users** → **single user** for now. No manage-users UI built; add users via `SEED_ADMIN_*` env or directly in the DB if needed.
+- **Taggable places** → **DONE.** Places are now taggable too (apply/remove on a place's page, filter via Tags → *Places*, logged in the audit trail). Migration `003_place_tags.sql`.
+- **Reverse proxy** → **nginx.** Full copy-paste server block (TLS, `client_max_body_size 20m`, single-hop matching `TRUST_PROXY=1`) is in the README deploy section.
+
+## Still open (don't block deployment)
+
+- **History retention.** Movement log is append-only and kept **forever** (now DB-enforced). Confirm that's what you want.
+- **Google Sheet mirror (M7).** Deferred. When ready: create a Google Cloud project + service account, share the target sheet with the service-account email, set `SHEET_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON`, and I'll wire export/import. Confirm tab naming (one spreadsheet; tabs items / places / movements / codes / tags?).
 
 ## Smaller things I deferred (say the word and I'll add them)
 

@@ -68,6 +68,7 @@ export const S = {
       parent: Type.Optional(Id),
       root: Type.Optional(Type.Boolean()),
       type: Type.Optional(PlaceTypeT),
+      tag: Type.Optional(Id),
     }),
   },
   createPlace: {

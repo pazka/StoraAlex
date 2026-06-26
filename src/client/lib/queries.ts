@@ -36,7 +36,7 @@ export const useItem = (id: number) =>
   useQuery({ queryKey: ['item', id], queryFn: () => api.get<ItemDetail>(`/api/items/${id}`), enabled: id > 0 });
 
 // ---------- places ----------
-export const usePlaces = (opts: { parent?: number; root?: boolean; type?: PlaceType } = {}) =>
+export const usePlaces = (opts: { parent?: number; root?: boolean; type?: PlaceType; tag?: number } = {}) =>
   useQuery({ queryKey: ['places', opts], queryFn: () => api.get<Place[]>(`/api/places${qs(opts)}`) });
 
 export const usePlace = (id: number) =>
@@ -157,6 +157,21 @@ export const useMovePlace = (id: number) => {
   return useMutation({
     mutationFn: (body: { parent_place_id: number | null; method?: MovementMethod }) =>
       api.post<PlaceDetail>(`/api/places/${id}/move`, body),
+    onSuccess: inval,
+  });
+};
+
+export const useTagPlace = (id: number) => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (tag_id: number) => api.post<PlaceDetail>(`/api/places/${id}/tags`, { tag_id }),
+    onSuccess: inval,
+  });
+};
+export const useUntagPlace = (id: number) => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (tagId: number) => api.del<PlaceDetail>(`/api/places/${id}/tags/${tagId}`),
     onSuccess: inval,
   });
 };

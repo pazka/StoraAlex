@@ -112,23 +112,37 @@ export function createRepos(db: DB) {
     setParent: (id: number, parentId: number | null): void => {
       run("UPDATE place SET parent_place_id = ?, updated_at = datetime('now') WHERE id = ?", [parentId, id]);
     },
-    list: (filter: { parent?: number | null; type?: PlaceType }): Place[] => {
+    list: (filter: { parent?: number | null; type?: PlaceType; tag?: number }): Place[] => {
       const where: string[] = [];
       const params: unknown[] = [];
-      if (filter.parent === null) where.push('parent_place_id IS NULL');
+      let join = '';
+      if (typeof filter.tag === 'number') {
+        join = 'JOIN place_tag pt ON pt.place_id = p.id';
+        where.push('pt.tag_id = ?');
+        params.push(filter.tag);
+      }
+      if (filter.parent === null) where.push('p.parent_place_id IS NULL');
       else if (typeof filter.parent === 'number') {
-        where.push('parent_place_id = ?');
+        where.push('p.parent_place_id = ?');
         params.push(filter.parent);
       }
       if (filter.type) {
-        where.push('type = ?');
+        where.push('p.type = ?');
         params.push(filter.type);
       }
       return all<Place>(
-        `SELECT * FROM place ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY name`,
+        `SELECT p.* FROM place p ${join} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.name`,
         params,
       );
     },
+    tags: (placeId: number): Tag[] =>
+      all<Tag>('SELECT t.* FROM tag t JOIN place_tag pt ON pt.tag_id = t.id WHERE pt.place_id = ? ORDER BY t.name', [
+        placeId,
+      ]),
+    addTag: (placeId: number, tagId: number): boolean =>
+      run('INSERT OR IGNORE INTO place_tag (place_id, tag_id) VALUES (?, ?)', [placeId, tagId]).changes > 0,
+    removeTag: (placeId: number, tagId: number): boolean =>
+      run('DELETE FROM place_tag WHERE place_id = ? AND tag_id = ?', [placeId, tagId]).changes > 0,
     children: (parentId: number): Place[] =>
       all<Place>('SELECT * FROM place WHERE parent_place_id = ? ORDER BY name', [parentId]),
     /** Ancestry from root down to the place itself (for breadcrumbs). */

@@ -86,20 +86,43 @@ The image is a multi-stage build that compiles everything and runs as a non-root
 
    The container listens on `127.0.0.1:8080` (not exposed publicly). Point your existing TLS reverse proxy at it.
 
-3. Reverse proxy (for `storalex.hosh.it`, same IP as `hosh.it`) — forward to `http://127.0.0.1:8080`, terminate TLS, and pass through `X-Forwarded-Proto`/`X-Forwarded-For`. Example nginx:
+3. Reverse proxy — nginx for `storalex.hosh.it` (same IP as `hosh.it`). Terminate TLS and forward to `127.0.0.1:8080`. This is a **single proxy hop**, which matches `TRUST_PROXY=1` so `req.ip` is the real client and per-IP rate limiting can't be spoofed.
 
    ```nginx
+   # /etc/nginx/sites-available/storalex.hosh.it
    server {
+     listen 80;
+     listen [::]:80;
      server_name storalex.hosh.it;
+     # Redirect everything to HTTPS
+     return 301 https://$host$request_uri;
+   }
+
+   server {
+     listen 443 ssl http2;
+     listen [::]:443 ssl http2;
+     server_name storalex.hosh.it;
+
+     # TLS — e.g. issued by certbot:
+     ssl_certificate     /etc/letsencrypt/live/storalex.hosh.it/fullchain.pem;
+     ssl_certificate_key /etc/letsencrypt/live/storalex.hosh.it/privkey.pem;
+
+     # Photos are re-encoded server-side but uploads can be up to ~15 MiB.
+     client_max_body_size 20m;
+
      location / {
        proxy_pass http://127.0.0.1:8080;
-       proxy_set_header Host $host;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_http_version 1.1;
+       proxy_set_header Host              $host;
+       proxy_set_header X-Real-IP         $remote_addr;
+       proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
        proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_read_timeout 60s;
      }
-     # listen 443 ssl; ... your certs ...
    }
    ```
+
+   Get a cert with `certbot --nginx -d storalex.hosh.it` (it can fill in the `ssl_*` lines for you). The app already sets HSTS and a strict CSP, so no extra security headers are needed in nginx.
 
 4. **Backup** = copy the `/data` volume (`storalex.db` + `media/`). That single directory is the entire state.
 

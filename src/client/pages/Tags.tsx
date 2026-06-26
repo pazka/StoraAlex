@@ -63,13 +63,17 @@ export function TagsPage() {
                 {KIND_LABEL[g.kind]}
               </div>
               {g.items.map((t) => (
-                <Link key={t.id} to={`/items?tag=${t.id}`} className="list-item">
-                  <span className="chip">
+                <div key={t.id} className="list-item">
+                  <span className="chip grow">
                     <span className="dot" style={t.color ? { background: t.color } : undefined} />
                     {t.name}
                   </span>
-                  <span className="right small muted">View packing list ›</span>
-                </Link>
+                  <span className="small">
+                    <Link to={`/items?tag=${t.id}`}>Objects</Link>
+                    {' · '}
+                    <Link to={`/places?tag=${t.id}`}>Places</Link>
+                  </span>
+                </div>
               ))}
             </div>
           ),

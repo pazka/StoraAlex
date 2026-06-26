@@ -13,6 +13,7 @@ function placeDetail(repos: Repos, id: number): PlaceDetail | undefined {
     parent_path: place.parent_place_id != null ? repos.places.breadcrumb(place.parent_place_id) : [],
     child_places: repos.places.children(id),
     items: repos.items.list({ place: id }),
+    tags: repos.places.tags(id),
   };
 }
 
@@ -22,7 +23,7 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get('/api/places', { schema: S.placesQuery }, async (req) => {
     const q = req.query;
     const parent = q.root ? null : typeof q.parent === 'number' ? q.parent : undefined;
-    return repos.places.list({ parent, type: q.type });
+    return repos.places.list({ parent, type: q.type, tag: q.tag });
   });
 
   app.get('/api/places/:id', { schema: S.byId }, async (req, reply) => {
@@ -137,6 +138,45 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
         note: req.body.note ?? null,
       });
     });
+    return placeDetail(repos, place.id);
+  });
+
+  app.post('/api/places/:id/tags', { schema: S.itemTag }, async (req, reply) => {
+    const place = repos.places.findById(req.params.id);
+    if (!place) return reply.code(404).send({ error: 'place not found' });
+    if (!repos.tags.findById(req.body.tag_id)) return reply.code(400).send({ error: 'tag not found' });
+    const added = repos.places.addTag(place.id, req.body.tag_id);
+    if (added) {
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'place',
+        entity_id: place.id,
+        action: 'tagged',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    }
+    return placeDetail(repos, place.id);
+  });
+
+  app.delete('/api/places/:id/tags/:tagId', { schema: S.itemTagDelete }, async (req, reply) => {
+    const place = repos.places.findById(req.params.id);
+    if (!place) return reply.code(404).send({ error: 'place not found' });
+    const removed = repos.places.removeTag(place.id, req.params.tagId);
+    if (removed) {
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'place',
+        entity_id: place.id,
+        action: 'untagged',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    }
     return placeDetail(repos, place.id);
   });
 };
