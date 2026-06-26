@@ -1,0 +1,25 @@
+# deps / build
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# secrets & local config
+.env
+.env.*
+!.env.example
+*service-account*.json
+*.pem
+*.key
+
+# runtime data (truth source + media — never commit)
+data/
+*.db
+*.db-shm
+*.db-wal
+media/
+
+# misc
+.DS_Store
+*.log
+coverage/
