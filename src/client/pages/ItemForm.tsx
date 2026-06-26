@@ -19,6 +19,7 @@ export function ItemFormPage() {
 
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
+  const [price, setPrice] = useState('');
   const [photoId, setPhotoId] = useState<number | null>(null);
   const [locId, setLocId] = useState<number | null>(locParam);
   const [picking, setPicking] = useState(false);
@@ -27,10 +28,17 @@ export function ItemFormPage() {
     if (isEdit && existing.data) {
       setName(existing.data.name);
       setNotes(existing.data.notes ?? '');
+      setPrice(existing.data.price != null ? String(existing.data.price) : '');
       setPhotoId(existing.data.photo_id);
       setLocId(existing.data.location_place_id);
     }
   }, [isEdit, existing.data]);
+
+  const priceVal = (() => {
+    if (price.trim() === '') return null;
+    const n = Number(price);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  })();
 
   const loc = usePlace(locId ?? 0);
 
@@ -39,13 +47,14 @@ export function ItemFormPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (isEdit) {
-      await update.mutateAsync({ name, notes: notes || null, photo_id: photoId });
+      await update.mutateAsync({ name, notes: notes || null, photo_id: photoId, price: priceVal });
       nav(`/items/${editId}`);
     } else {
       const created = await create.mutateAsync({
         name,
         notes: notes || null,
         photo_id: photoId,
+        price: priceVal,
         location_place_id: locId,
         code_value: code,
         method: code ? 'scan' : 'manual',
@@ -92,6 +101,20 @@ export function ItemFormPage() {
             </div>
           </div>
         )}
+
+        <div className="field">
+          <label htmlFor="price">Price (optional, €)</label>
+          <input
+            id="price"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="e.g. 129.99"
+          />
+        </div>
 
         <div className="field">
           <label htmlFor="notes">Notes (optional)</label>

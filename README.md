@@ -72,11 +72,9 @@ The image is a multi-stage build that compiles everything and runs as a non-root
    NODE_ENV=production
    APP_PEPPER=<long random secret>
    SESSION_KEY=<long random secret>
-   SEED_ADMIN_USER=alex
-   SEED_ADMIN_PASSWORD=<strong password>      # used once, on first boot
    ```
 
-   Generate secrets with e.g. `openssl rand -hex 32`.
+   Generate secrets with e.g. `openssl rand -hex 32`. No admin is seeded — you create the first account in the browser on first visit (see step 4).
 
 2. Bring it up:
 
@@ -124,7 +122,9 @@ The image is a multi-stage build that compiles everything and runs as a non-root
 
    Get a cert with `certbot --nginx -d storalex.hosh.it` (it can fill in the `ssl_*` lines for you). The app already sets HSTS and a strict CSP, so no extra security headers are needed in nginx.
 
-4. **Backup** = copy the `/data` volume (`storalex.db` + `media/`). That single directory is the entire state.
+4. **First account.** Open `https://storalex.hosh.it` — on first visit it prompts you to create the first user. After that it's a normal login; add more users in-app (top-bar `👤` → Users). No public signup once the first account exists.
+
+5. **Backup** = copy the `/data` volume (`storalex.db` + `media/`). That single directory is the entire state.
 
 ---
 

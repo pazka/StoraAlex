@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePlaces, useTags } from '../lib/queries.ts';
 import { Spinner, ErrorMsg } from '../components/ui.tsx';
 
-export const TYPE_ICON: Record<string, string> = { unit: '🏠', shelf: '🗄️', crate: '📦' };
+export const PLACE_ICON = '🗄️';
 
 export function PlacesPage() {
   const [params, setParams] = useSearchParams();
@@ -44,12 +44,10 @@ export function PlacesPage() {
 
       {places.data?.map((p) => (
         <Link key={p.id} to={`/places/${p.id}`} className="list-item">
-          <span className="thumb">{TYPE_ICON[p.type]}</span>
+          <span className="thumb">{PLACE_ICON}</span>
           <span className="grow">
             <div>{p.name}</div>
-            <div className="small muted">
-              {p.type} · {p.code_display}
-            </div>
+            <div className="small muted">{p.code_display}</div>
           </span>
         </Link>
       ))}

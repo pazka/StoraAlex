@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { useItems, useTags } from '../lib/queries.ts';
+import { useItems, useTags, useBulkMove } from '../lib/queries.ts';
 import { Spinner, ErrorMsg, Thumb, StatusBadge } from '../components/ui.tsx';
+import { PlacePicker } from '../components/PlacePicker.tsx';
 
 export function ItemsPage() {
   const [params, setParams] = useSearchParams();
@@ -10,6 +12,11 @@ export function ItemsPage() {
 
   const tags = useTags();
   const items = useItems({ q: q || undefined, status, tag });
+  const bulkMove = useBulkMove();
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [picking, setPicking] = useState(false);
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);
@@ -20,15 +27,43 @@ export function ItemsPage() {
 
   const activeTag = tag ? tags.data?.find((t) => t.id === tag) : undefined;
 
+  function toggle(id: number) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function exitSelect() {
+    setSelectMode(false);
+    setSelected(new Set());
+    setPicking(false);
+  }
+  async function doBulk(toPlaceId: number | null) {
+    if (selected.size === 0) return;
+    await bulkMove.mutateAsync({ item_ids: [...selected], to_place_id: toPlaceId, method: 'manual' });
+    exitSelect();
+  }
+
   return (
     <div>
       <div className="row" style={{ marginBottom: 12 }}>
         <h2 style={{ margin: 0 }} className="grow">
           Objects
         </h2>
-        <Link className="btn primary" to="/items/new">
-          + New
-        </Link>
+        <button
+          className="btn"
+          style={{ minHeight: 36, padding: '6px 12px' }}
+          onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
+        >
+          {selectMode ? 'Cancel' : 'Select'}
+        </button>
+        {!selectMode && (
+          <Link className="btn primary" to="/items/new">
+            + New
+          </Link>
+        )}
       </div>
 
       <input
@@ -60,19 +95,59 @@ export function ItemsPage() {
       )}
 
       {items.isLoading && <Spinner />}
-      <ErrorMsg error={items.error} />
+      <ErrorMsg error={items.error || bulkMove.error} />
       {items.data?.length === 0 && <p className="muted">No objects yet. Scan a blank label or tap “New”.</p>}
 
-      {items.data?.map((item) => (
-        <Link key={item.id} to={`/items/${item.id}`} className="list-item">
-          <Thumb photoId={item.photo_id} alt={item.name} />
-          <span className="grow">
-            <div>{item.name}</div>
-            <div className="small muted">{item.code_display}</div>
-          </span>
-          <StatusBadge inStorage={item.location_place_id != null} />
-        </Link>
-      ))}
+      {items.data?.map((item) =>
+        selectMode ? (
+          <div
+            key={item.id}
+            className="list-item"
+            style={{ cursor: 'pointer' }}
+            onClick={() => toggle(item.id)}
+          >
+            <span className={`checkbox ${selected.has(item.id) ? 'on' : ''}`}>{selected.has(item.id) ? '✓' : ''}</span>
+            <Thumb photoId={item.photo_id} alt={item.name} />
+            <span className="grow">
+              <div>{item.name}</div>
+              <div className="small muted">{item.code_display}</div>
+            </span>
+            <StatusBadge inStorage={item.location_place_id != null} />
+          </div>
+        ) : (
+          <Link key={item.id} to={`/items/${item.id}`} className="list-item">
+            <Thumb photoId={item.photo_id} alt={item.name} />
+            <span className="grow">
+              <div>{item.name}</div>
+              <div className="small muted">{item.code_display}</div>
+            </span>
+            <StatusBadge inStorage={item.location_place_id != null} />
+          </Link>
+        ),
+      )}
+
+      {selectMode && (
+        <div className="bulkbar">
+          <span className="grow small">{selected.size} selected</span>
+          <button className="btn" onClick={() => setPicking(true)} disabled={selected.size === 0 || bulkMove.isPending}>
+            Move to…
+          </button>
+          <button className="btn" onClick={() => doBulk(null)} disabled={selected.size === 0 || bulkMove.isPending}>
+            Take out
+          </button>
+        </div>
+      )}
+
+      {picking && (
+        <PlacePicker
+          title="Move selected to…"
+          onPick={(placeId) => {
+            setPicking(false);
+            if (placeId != null) void doBulk(placeId);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </div>
   );
 }

@@ -38,7 +38,7 @@ Single Node process (`src/server/index.ts`) serves the JSON API, the built PWA, 
   - `db/repos.ts` — all data access, one factory `createRepos(db)`; every query is parameterized (helpers `all`/`get`/`run`).
   - `db/migrations/*.sql` — schema; copied into `dist/` by the build.
   - `auth/` — argon2id+pepper (`password.ts`), session token hashing (`session.ts`).
-  - `routes/` — one plugin per area (auth, items, places, codes, tags, movements, media, sheet); `FastifyPluginAsyncTypebox`.
+  - `routes/` — one plugin per area (auth incl. first-run `/api/auth/setup`, users, items, places, codes, tags, movements, media, sheet); `FastifyPluginAsyncTypebox`.
   - `schemas.ts` — TypeBox request schemas (`additionalProperties:false` → unknown fields are rejected).
   - `lib/` — `images.ts` (sharp re-encode/EXIF-strip), `pdf.ts` (QR label sheet), `sheet.ts` (M7 stub).
 - **`src/client/`** — React + Vite PWA. `lib/api.ts` (fetch wrapper), `lib/auth.tsx` (session context), `lib/queries.ts` (TanStack Query hooks), `components/` (Layout, Scanner, PlacePicker, ui), `pages/` (Scan/Items/Places/Tags/Labels/…). Routing via react-router; QR scan via `@zxing/browser` with a manual-entry fallback.

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePlaces } from '../lib/queries.ts';
 import { Modal, Spinner } from './ui.tsx';
 
-const TYPE_ICON: Record<string, string> = { unit: '🏠', shelf: '🗄️', crate: '📦' };
+const PLACE_ICON = '🗄️';
 
 /** Modal list of places to choose a destination/parent. */
 export function PlacePicker({
@@ -36,12 +36,10 @@ export function PlacePicker({
         {places.isLoading && <Spinner />}
         {filtered.map((p) => (
           <button key={p.id} className="list-item" style={{ width: '100%', textAlign: 'left' }} onClick={() => onPick(p.id)}>
-            <span className="thumb">{TYPE_ICON[p.type]}</span>
+            <span className="thumb">{PLACE_ICON}</span>
             <span className="grow">
               <div>{p.name}</div>
-              <div className="small muted">
-                {p.type} · {p.code_display}
-              </div>
+              <div className="small muted">{p.code_display}</div>
             </span>
           </button>
         ))}

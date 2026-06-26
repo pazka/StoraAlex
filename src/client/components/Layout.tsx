@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/auth.tsx';
 
 const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'active' : '');
@@ -12,9 +12,14 @@ export function Layout() {
         <h1>StorAlex</h1>
         <span className="spacer" />
         {user && (
-          <button className="btn" style={{ minHeight: 36, padding: '6px 12px' }} onClick={() => void logout()}>
-            Logout
-          </button>
+          <>
+            <Link to="/users" className="small" style={{ marginRight: 4 }} title="Users">
+              👤 {user.username}
+            </Link>
+            <button className="btn" style={{ minHeight: 36, padding: '6px 12px' }} onClick={() => void logout()}>
+              Logout
+            </button>
+          </>
         )}
       </header>
       <main className="content">

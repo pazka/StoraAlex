@@ -23,7 +23,7 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get('/api/places', { schema: S.placesQuery }, async (req) => {
     const q = req.query;
     const parent = q.root ? null : typeof q.parent === 'number' ? q.parent : undefined;
-    return repos.places.list({ parent, type: q.type, tag: q.tag });
+    return repos.places.list({ parent, tag: q.tag });
   });
 
   app.get('/api/places/:id', { schema: S.byId }, async (req, reply) => {
@@ -64,7 +64,6 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
       const codeValue = codeAction === 'allocate' ? repos.codes.allocate('place', 1)[0]!.code_value : b.code_value!;
       const newId = repos.places.create({
         code_display: codeValue,
-        type: b.type,
         name: b.name,
         photo_id: b.photo_id ?? null,
         info: b.info ?? null,

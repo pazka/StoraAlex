@@ -60,6 +60,19 @@ Camera scanning needs a device with a camera + HTTPS (or localhost); on a deskto
 - **Multiple photos per object** — schema keeps a single primary photo for now (SPEC v1).
 - **Client bundle is ~1 MB** (the `@zxing` QR library is heavy). Fine for self-hosting; can be code-split so the scanner loads lazily if you care about first-load size.
 
+## Round 2 — features added (2026-06-26)
+
+All verified end-to-end in the browser.
+
+- **No admin seed.** First run with an empty database shows a centered "create the first account" screen (`/api/auth/setup`, allowed only while zero users exist). After that it's the normal login. The old `SEED_ADMIN_*` env path still works headlessly via `npm run seed` but is no longer used at boot.
+- **User management** (`👤 <name>` in the top bar → Users page). Any signed-in user can add users, reset any password, and delete users — except the last remaining one (lockout guard). Deleting a user revokes their sessions.
+- **Places lost the unit/shelf/crate "type"** — they're just nestable containers now (one icon, nesting unchanged). Migration `004` drops the column.
+- **Bulk move.** Items list → "Select" → tick objects → "Move to…" or "Take out" moves them all at once (each logged in history).
+- **Object price** (optional, shown in €). Migration `004` adds the column. *Currency is hardcoded to € — tell me if you want it configurable or a different symbol.*
+- **Login page is centered** (both axes).
+
+While doing this I also fixed a latent validation bug: ajv's type coercion was turning a `null` (e.g. "clear the price/photo") into `0`. All nullable fields now reject coercion correctly.
+
 ## Security review (multi-agent adversarial pass)
 
 I ran an 8-dimension adversarial security review (auth/session, SQL injection, input validation, uploads, headers/CSP, secrets/config, supply-chain/Docker, business-logic) and verified every finding against the actual code. **No critical or high issues. Zero SQL injection** (all queries parameterized). 20 lower-severity findings were confirmed; I fixed the meaningful ones:

@@ -11,7 +11,6 @@ import type {
   Photo,
   PlaceBreadcrumb,
   EntityType,
-  PlaceType,
   MovementAction,
   MovementMethod,
 } from '../../shared/types.js';
@@ -54,6 +53,10 @@ export function createRepos(db: DB) {
       run("UPDATE user SET last_login_at = datetime('now') WHERE id = ?", [id]);
     },
     count: (): number => get<{ n: number }>('SELECT COUNT(*) AS n FROM user')!.n,
+    list: (): User[] => all<User>('SELECT id, username, created_at, last_login_at FROM user ORDER BY username'),
+    delete: (id: number): boolean => run('DELETE FROM user WHERE id = ?', [id]).changes > 0,
+    setPassword: (id: number, passwordHash: string): boolean =>
+      run('UPDATE user SET password_hash = ? WHERE id = ?', [passwordHash, id]).changes > 0,
   };
 
   // ============================ sessions ============================
@@ -94,25 +97,27 @@ export function createRepos(db: DB) {
   const places = {
     create: (p: {
       code_display: string;
-      type: PlaceType;
       name: string;
       photo_id: number | null;
       info: string | null;
       parent_place_id: number | null;
     }): number =>
       num(
-        run(
-          'INSERT INTO place (code_display, type, name, photo_id, info, parent_place_id) VALUES (?, ?, ?, ?, ?, ?)',
-          [p.code_display, p.type, p.name, p.photo_id, p.info, p.parent_place_id],
-        ).lastInsertRowid,
+        run('INSERT INTO place (code_display, name, photo_id, info, parent_place_id) VALUES (?, ?, ?, ?, ?)', [
+          p.code_display,
+          p.name,
+          p.photo_id,
+          p.info,
+          p.parent_place_id,
+        ]).lastInsertRowid,
       ),
     findById: (id: number): Place | undefined => get<Place>('SELECT * FROM place WHERE id = ?', [id]),
-    update: (id: number, patch: Partial<Pick<Place, 'name' | 'info' | 'photo_id' | 'type'>>): boolean =>
-      applyUpdate('place', id, ['name', 'info', 'photo_id', 'type'], patch),
+    update: (id: number, patch: Partial<Pick<Place, 'name' | 'info' | 'photo_id'>>): boolean =>
+      applyUpdate('place', id, ['name', 'info', 'photo_id'], patch),
     setParent: (id: number, parentId: number | null): void => {
       run("UPDATE place SET parent_place_id = ?, updated_at = datetime('now') WHERE id = ?", [parentId, id]);
     },
-    list: (filter: { parent?: number | null; type?: PlaceType; tag?: number }): Place[] => {
+    list: (filter: { parent?: number | null; tag?: number }): Place[] => {
       const where: string[] = [];
       const params: unknown[] = [];
       let join = '';
@@ -125,10 +130,6 @@ export function createRepos(db: DB) {
       else if (typeof filter.parent === 'number') {
         where.push('p.parent_place_id = ?');
         params.push(filter.parent);
-      }
-      if (filter.type) {
-        where.push('p.type = ?');
-        params.push(filter.type);
       }
       return all<Place>(
         `SELECT p.* FROM place p ${join} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY p.name`,
@@ -148,13 +149,13 @@ export function createRepos(db: DB) {
     /** Ancestry from root down to the place itself (for breadcrumbs). */
     breadcrumb: (id: number): PlaceBreadcrumb[] =>
       all<PlaceBreadcrumb>(
-        `WITH RECURSIVE anc(id, name, type, code_display, parent_place_id, depth) AS (
-           SELECT id, name, type, code_display, parent_place_id, 0 FROM place WHERE id = ?
+        `WITH RECURSIVE anc(id, name, code_display, parent_place_id, depth) AS (
+           SELECT id, name, code_display, parent_place_id, 0 FROM place WHERE id = ?
            UNION ALL
-           SELECT p.id, p.name, p.type, p.code_display, p.parent_place_id, anc.depth + 1
+           SELECT p.id, p.name, p.code_display, p.parent_place_id, anc.depth + 1
            FROM place p JOIN anc ON p.id = anc.parent_place_id
          )
-         SELECT id, name, type, code_display FROM anc ORDER BY depth DESC`,
+         SELECT id, name, code_display FROM anc ORDER BY depth DESC`,
         [id],
       ),
     /** Walk up from `fromId`; true if `targetId` is on its ancestor chain (or equal). */
@@ -183,19 +184,17 @@ export function createRepos(db: DB) {
       photo_id: number | null;
       location_place_id: number | null;
       notes: string | null;
+      price: number | null;
     }): number =>
       num(
-        run('INSERT INTO item (code_display, name, photo_id, location_place_id, notes) VALUES (?, ?, ?, ?, ?)', [
-          it.code_display,
-          it.name,
-          it.photo_id,
-          it.location_place_id,
-          it.notes,
-        ]).lastInsertRowid,
+        run(
+          'INSERT INTO item (code_display, name, photo_id, location_place_id, notes, price) VALUES (?, ?, ?, ?, ?, ?)',
+          [it.code_display, it.name, it.photo_id, it.location_place_id, it.notes, it.price],
+        ).lastInsertRowid,
       ),
     findById: (id: number): Item | undefined => get<Item>('SELECT * FROM item WHERE id = ?', [id]),
-    update: (id: number, patch: Partial<Pick<Item, 'name' | 'notes' | 'photo_id'>>): boolean =>
-      applyUpdate('item', id, ['name', 'notes', 'photo_id'], patch),
+    update: (id: number, patch: Partial<Pick<Item, 'name' | 'notes' | 'photo_id' | 'price'>>): boolean =>
+      applyUpdate('item', id, ['name', 'notes', 'photo_id', 'price'], patch),
     setLocation: (id: number, placeId: number | null): void => {
       run("UPDATE item SET location_place_id = ?, updated_at = datetime('now') WHERE id = ?", [placeId, id]);
     },

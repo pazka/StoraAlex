@@ -3,7 +3,6 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { usePlace, useCreatePlace, useUpdatePlace } from '../lib/queries.ts';
 import { PhotoInput, Spinner, ErrorMsg } from '../components/ui.tsx';
 import { PlacePicker } from '../components/PlacePicker.tsx';
-import type { PlaceType } from '../../shared/types.ts';
 
 export function PlaceFormPage() {
   const params = useParams();
@@ -19,7 +18,6 @@ export function PlaceFormPage() {
   const update = useUpdatePlace(editId ?? 0);
 
   const [name, setName] = useState('');
-  const [type, setType] = useState<PlaceType>('crate');
   const [info, setInfo] = useState('');
   const [photoId, setPhotoId] = useState<number | null>(null);
   const [parentId, setParentId] = useState<number | null>(parentParam);
@@ -28,7 +26,6 @@ export function PlaceFormPage() {
   useEffect(() => {
     if (isEdit && existing.data) {
       setName(existing.data.name);
-      setType(existing.data.type);
       setInfo(existing.data.info ?? '');
       setPhotoId(existing.data.photo_id);
       setParentId(existing.data.parent_place_id);
@@ -42,12 +39,11 @@ export function PlaceFormPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (isEdit) {
-      await update.mutateAsync({ name, type, info: info || null, photo_id: photoId });
+      await update.mutateAsync({ name, info: info || null, photo_id: photoId });
       nav(`/places/${editId}`);
     } else {
       const created = await create.mutateAsync({
         name,
-        type,
         info: info || null,
         photo_id: photoId,
         parent_place_id: parentId,
@@ -76,15 +72,6 @@ export function PlaceFormPage() {
         <div className="field">
           <label htmlFor="n">Name</label>
           <input id="n" value={name} onChange={(e) => setName(e.target.value)} autoFocus required maxLength={200} />
-        </div>
-
-        <div className="field">
-          <label htmlFor="t">Type</label>
-          <select id="t" value={type} onChange={(e) => setType(e.target.value as PlaceType)}>
-            <option value="unit">Unit (room / locker)</option>
-            <option value="shelf">Shelf</option>
-            <option value="crate">Crate / box</option>
-          </select>
         </div>
 
         <div className="field">

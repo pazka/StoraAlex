@@ -8,6 +8,7 @@ interface AuthValue {
   user: User | null;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
+  setup: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -33,6 +34,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onSuccess: ({ user }) => qc.setQueryData(['me'], user),
   });
 
+  const setupMut = useMutation({
+    mutationFn: (vars: { username: string; password: string }) =>
+      api.post<{ user: User }>('/api/auth/setup', vars),
+    onSuccess: ({ user }) => qc.setQueryData(['me'], user),
+  });
+
   const logoutMut = useMutation({
     mutationFn: () => api.post('/api/auth/logout'),
     onSuccess: () => {
@@ -46,6 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     login: async (username, password) => {
       await loginMut.mutateAsync({ username, password });
+    },
+    setup: async (username, password) => {
+      await setupMut.mutateAsync({ username, password });
     },
     logout: async () => {
       await logoutMut.mutateAsync();

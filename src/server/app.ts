@@ -14,6 +14,7 @@ import { createRepos } from './db/repos.js';
 import { sessionCookieName, hashToken } from './auth/session.js';
 
 import { authRoutes } from './routes/auth.js';
+import { userRoutes } from './routes/users.js';
 import { itemRoutes } from './routes/items.js';
 import { placeRoutes } from './routes/places.js';
 import { codeRoutes } from './routes/codes.js';
@@ -25,7 +26,15 @@ import { sheetRoutes } from './routes/sheet.js';
 /** Requests that don't require an authenticated session. */
 function needsAuth(url: string): boolean {
   const p = url.split('?')[0] ?? url;
-  if (p === '/api/auth/login' || p === '/api/auth/logout' || p === '/healthz') return false;
+  if (
+    p === '/api/auth/login' ||
+    p === '/api/auth/logout' ||
+    p === '/api/auth/setup' || // first-run account creation (guarded by user count == 0)
+    p === '/api/setup-needed' ||
+    p === '/healthz'
+  ) {
+    return false;
+  }
   return p.startsWith('/api/') || p.startsWith('/media/');
 }
 
@@ -96,6 +105,7 @@ export async function buildApp(config: Config, db: DB) {
   });
 
   await app.register(authRoutes);
+  await app.register(userRoutes);
   await app.register(itemRoutes);
   await app.register(placeRoutes);
   await app.register(codeRoutes);

@@ -37,6 +37,11 @@ export function ItemDetailPage() {
           </div>
           <StatusBadge inStorage={inStorage} />
         </div>
+        {it.price != null && (
+          <p className="small" style={{ marginBottom: it.notes ? 8 : 0 }}>
+            Price: <b>€{it.price}</b>
+          </p>
+        )}
         {it.notes && <p style={{ marginBottom: 0 }}>{it.notes}</p>}
       </div>
 

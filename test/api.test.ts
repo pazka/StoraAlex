@@ -45,8 +45,8 @@ describe('input validation', () => {
     const res = await post('/api/tags', { name: 'X', bogus: 1 });
     expect(res.statusCode).toBe(400);
   });
-  it('rejects an invalid place type (400)', async () => {
-    const res = await post('/api/places', { name: 'Y', type: 'box' });
+  it('rejects unknown fields on place creation (400)', async () => {
+    const res = await post('/api/places', { name: 'Y', bogus: 1 });
     expect(res.statusCode).toBe(400);
   });
 });
@@ -56,12 +56,12 @@ describe('places: nesting, breadcrumb, cycle prevention', () => {
   let shelfId: number;
 
   it('creates a unit and a nested shelf', async () => {
-    const unit = await post('/api/places', { name: 'Garage', type: 'unit' });
+    const unit = await post('/api/places', { name: 'Garage' });
     expect(unit.statusCode).toBe(201);
     unitId = unit.json().id;
     expect(unit.json().code_display).toMatch(/^PLC-\d{6}$/);
 
-    const shelf = await post('/api/places', { name: 'Shelf A', type: 'shelf', parent_place_id: unitId });
+    const shelf = await post('/api/places', { name: 'Shelf A', parent_place_id: unitId });
     expect(shelf.statusCode).toBe(201);
     shelfId = shelf.json().id;
     expect(shelf.json().parent_path).toHaveLength(1);
@@ -79,7 +79,7 @@ describe('items: create, move in/out, audit log, codes', () => {
   let itemId: number;
 
   it('sets up a place and creates an item inside it', async () => {
-    placeId = (await post('/api/places', { name: 'Bench', type: 'crate' })).json().id;
+    placeId = (await post('/api/places', { name: 'Bench' })).json().id;
     const item = await post('/api/items', { name: 'Cordless drill', location_place_id: placeId, notes: 'Makita' });
     expect(item.statusCode).toBe(201);
     const body = item.json();
@@ -179,7 +179,7 @@ describe('tags and packing list', () => {
 describe('place tagging', () => {
   it('tags and untags a place', async () => {
     const tagId = (await post('/api/tags', { name: 'Crate Event', kind: 'event' })).json().id;
-    const placeId = (await post('/api/places', { name: 'Crate Z', type: 'crate' })).json().id;
+    const placeId = (await post('/api/places', { name: 'Crate Z' })).json().id;
 
     const tagged = await post(`/api/places/${placeId}/tags`, { tag_id: tagId });
     expect(tagged.statusCode).toBe(200);
@@ -209,6 +209,30 @@ describe('hardening (from security review)', () => {
     const real = await patch(`/api/items/${id}`, { name: 'Renamed' });
     expect(real.statusCode).toBe(200);
     expect(await count()).toBe(before + 1); // real edit is logged
+  });
+});
+
+describe('bulk move and price', () => {
+  it('moves multiple objects to a place at once', async () => {
+    const placeId = (await post('/api/places', { name: 'Crate Bulk' })).json().id;
+    const a = (await post('/api/items', { name: 'Bulk A' })).json().id;
+    const b = (await post('/api/items', { name: 'Bulk B' })).json().id;
+    const res = await post('/api/items/bulk-move', { item_ids: [a, b], to_place_id: placeId });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().moved).toBe(2);
+    expect((await get(`/api/items/${a}`)).json().location_place_id).toBe(placeId);
+    expect((await get(`/api/items/${b}`)).json().location_place_id).toBe(placeId);
+  });
+
+  it('stores, returns, and clears an object price', async () => {
+    const created = await post('/api/items', { name: 'Priced', price: 129.99 });
+    expect(created.statusCode).toBe(201);
+    expect(created.json().price).toBe(129.99);
+    const id = created.json().id;
+    await patch(`/api/items/${id}`, { price: 50 });
+    expect((await get(`/api/items/${id}`)).json().price).toBe(50);
+    await patch(`/api/items/${id}`, { price: null });
+    expect((await get(`/api/items/${id}`)).json().price).toBeNull();
   });
 });
 

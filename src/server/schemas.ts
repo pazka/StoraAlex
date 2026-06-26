@@ -5,27 +5,38 @@ import { Type } from '@fastify/type-provider-typebox';
 const obj = <T extends Parameters<typeof Type.Object>[0]>(props: T) =>
   Type.Object(props, { additionalProperties: false });
 
+// NOTE: nullable fields are written `Type.Union([Type.Null(), X])` with Null
+// FIRST so ajv's coerceTypes matches an incoming null directly instead of
+// coercing it (e.g. null -> 0 for a number, silently corrupting a "clear this
+// field" request). Keep Null first when adding new nullable fields.
+
 // Entity-ID / foreign-key integers: positive and bounded to the SQLite signed
 // 32-bit range so out-of-range / precision-losing values are rejected at the edge.
 const Id = Type.Integer({ minimum: 1, maximum: 2147483647 });
 const Name = Type.String({ minLength: 1, maxLength: 200 });
-const OptText = Type.Optional(Type.Union([Type.String({ maxLength: 5000 }), Type.Null()]));
-const OptPhoto = Type.Optional(Type.Union([Id, Type.Null()]));
-const PlaceTypeT = Type.Union([Type.Literal('unit'), Type.Literal('shelf'), Type.Literal('crate')]);
+const OptText = Type.Optional(Type.Union([Type.Null(), Type.String({ maxLength: 5000 })]));
+const OptPhoto = Type.Optional(Type.Union([Type.Null(), Id]));
+const OptPrice = Type.Optional(Type.Union([Type.Null(), Type.Number({ minimum: 0, maximum: 1e12 })]));
 const EntityTypeT = Type.Union([Type.Literal('item'), Type.Literal('place')]);
 const MethodT = Type.Union([Type.Literal('scan'), Type.Literal('manual')]);
 const TagKindT = Type.Union([Type.Literal('event'), Type.Literal('flag'), Type.Literal('other')]);
 const CodeValue = Type.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z0-9\\-]+$' });
+const Username = Type.String({ minLength: 1, maxLength: 100 });
+const NewPassword = Type.String({ minLength: 8, maxLength: 1000 });
 const IdParam = obj({ id: Id });
 
 export const S = {
-  // ---- auth ----
+  // ---- auth & users ----
   login: {
     body: obj({
-      username: Type.String({ minLength: 1, maxLength: 100 }),
+      username: Username,
       password: Type.String({ minLength: 1, maxLength: 1000 }),
     }),
   },
+  setup: { body: obj({ username: Username, password: NewPassword }) },
+  createUser: { body: obj({ username: Username, password: NewPassword }) },
+  changePassword: { params: IdParam, body: obj({ password: NewPassword }) },
+  userId: { params: IdParam },
 
   // ---- items ----
   itemsQuery: {
@@ -41,19 +52,28 @@ export const S = {
       name: Name,
       notes: OptText,
       photo_id: OptPhoto,
-      location_place_id: Type.Optional(Type.Union([Id, Type.Null()])),
+      price: OptPrice,
+      location_place_id: Type.Optional(Type.Union([Type.Null(), Id])),
       code_value: Type.Optional(CodeValue),
       method: Type.Optional(MethodT),
     }),
   },
   patchItem: {
     params: IdParam,
-    body: obj({ name: Type.Optional(Name), notes: OptText, photo_id: OptPhoto }),
+    body: obj({ name: Type.Optional(Name), notes: OptText, photo_id: OptPhoto, price: OptPrice }),
   },
   moveItem: {
     params: IdParam,
     body: obj({
-      to_place_id: Type.Union([Id, Type.Null()]),
+      to_place_id: Type.Union([Type.Null(), Id]),
+      method: Type.Optional(MethodT),
+      note: OptText,
+    }),
+  },
+  bulkMoveItems: {
+    body: obj({
+      item_ids: Type.Array(Id, { minItems: 1, maxItems: 500 }),
+      to_place_id: Type.Union([Type.Null(), Id]),
       method: Type.Optional(MethodT),
       note: OptText,
     }),
@@ -67,15 +87,13 @@ export const S = {
     querystring: obj({
       parent: Type.Optional(Id),
       root: Type.Optional(Type.Boolean()),
-      type: Type.Optional(PlaceTypeT),
       tag: Type.Optional(Id),
     }),
   },
   createPlace: {
     body: obj({
       name: Name,
-      type: PlaceTypeT,
-      parent_place_id: Type.Optional(Type.Union([Id, Type.Null()])),
+      parent_place_id: Type.Optional(Type.Union([Type.Null(), Id])),
       info: OptText,
       photo_id: OptPhoto,
       code_value: Type.Optional(CodeValue),
@@ -84,12 +102,12 @@ export const S = {
   },
   patchPlace: {
     params: IdParam,
-    body: obj({ name: Type.Optional(Name), info: OptText, photo_id: OptPhoto, type: Type.Optional(PlaceTypeT) }),
+    body: obj({ name: Type.Optional(Name), info: OptText, photo_id: OptPhoto }),
   },
   movePlace: {
     params: IdParam,
     body: obj({
-      parent_place_id: Type.Union([Id, Type.Null()]),
+      parent_place_id: Type.Union([Type.Null(), Id]),
       method: Type.Optional(MethodT),
       note: OptText,
     }),
@@ -111,7 +129,7 @@ export const S = {
   createTag: {
     body: obj({
       name: Type.String({ minLength: 1, maxLength: 100 }),
-      color: Type.Optional(Type.Union([Type.String({ maxLength: 32 }), Type.Null()])),
+      color: Type.Optional(Type.Union([Type.Null(), Type.String({ maxLength: 32 })])),
       kind: Type.Optional(TagKindT),
     }),
   },

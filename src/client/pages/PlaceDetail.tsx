@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { usePlace, useMovePlace, useTags, useTagPlace, useUntagPlace } from '../lib/queries.ts';
 import { Spinner, ErrorMsg, Thumb, Crumbs, StatusBadge } from '../components/ui.tsx';
 import { PlacePicker } from '../components/PlacePicker.tsx';
-import { TYPE_ICON } from './Places.tsx';
+import { PLACE_ICON } from './Places.tsx';
 
 export function PlaceDetailPage() {
   const id = Number(useParams().id);
@@ -32,11 +32,9 @@ export function PlaceDetailPage() {
           <Thumb photoId={p.photo_id} alt={p.name} />
           <div className="grow">
             <h2 style={{ margin: '0 0 4px' }}>
-              {TYPE_ICON[p.type]} {p.name}
+              {PLACE_ICON} {p.name}
             </h2>
-            <div className="small muted">
-              {p.type} · {p.code_display}
-            </div>
+            <div className="small muted">{p.code_display}</div>
           </div>
         </div>
         {p.parent_path.length > 0 && (
@@ -102,12 +100,10 @@ export function PlaceDetailPage() {
         </div>
         {p.child_places.map((c) => (
           <Link key={c.id} to={`/places/${c.id}`} className="list-item">
-            <span className="thumb">{TYPE_ICON[c.type]}</span>
+            <span className="thumb">{PLACE_ICON}</span>
             <span className="grow">
               <div>{c.name}</div>
-              <div className="small muted">
-                {c.type} · {c.code_display}
-              </div>
+              <div className="small muted">{c.code_display}</div>
             </span>
           </Link>
         ))}

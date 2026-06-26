@@ -2,7 +2,6 @@
 // the DB schema (src/server/db/migrations) and the route schemas.
 
 export type EntityType = 'item' | 'place';
-export type PlaceType = 'unit' | 'shelf' | 'crate';
 export type CodeStatus = 'unassigned' | 'active' | 'retired';
 export type TagKind = 'event' | 'flag' | 'other';
 export type MovementMethod = 'scan' | 'manual';
@@ -34,7 +33,6 @@ export interface Photo {
 export interface Place {
   id: number;
   code_display: string;
-  type: PlaceType;
   name: string;
   photo_id: number | null;
   info: string | null;
@@ -50,6 +48,7 @@ export interface Item {
   photo_id: number | null;
   location_place_id: number | null;
   notes: string | null;
+  price: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,7 +86,6 @@ export interface Movement {
 export interface PlaceBreadcrumb {
   id: number;
   name: string;
-  type: PlaceType;
   code_display: string;
 }
 

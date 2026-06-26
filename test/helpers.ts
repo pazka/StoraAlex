@@ -11,7 +11,7 @@ import { hashPassword } from '../src/server/auth/password.ts';
 export const TEST_USER = 'tester';
 export const TEST_PW = 'pw-12345678';
 
-export async function makeApp() {
+export async function makeApp({ seed = true }: { seed?: boolean } = {}) {
   const mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-test-'));
   const config = loadConfig({
     NODE_ENV: 'test',
@@ -23,7 +23,7 @@ export async function makeApp() {
   });
   const db = openDb(config.dbPath);
   const repos = createRepos(db);
-  repos.users.create(TEST_USER, await hashPassword(TEST_PW, config.appPepper));
+  if (seed) repos.users.create(TEST_USER, await hashPassword(TEST_PW, config.appPepper));
   const app = await buildApp(config, db);
   await app.ready();
   return { app, config, db, mediaDir };

@@ -69,6 +69,7 @@ export const itemRoutes: FastifyPluginAsyncTypebox = async (app) => {
         photo_id: b.photo_id ?? null,
         location_place_id: b.location_place_id ?? null,
         notes: b.notes ?? null,
+        price: b.price ?? null,
       });
       if (codeAction === 'create') repos.codes.createActive(codeValue, 'item', newId);
       else repos.codes.assign(codeValue, 'item', newId);
@@ -148,6 +149,39 @@ export const itemRoutes: FastifyPluginAsyncTypebox = async (app) => {
       });
     });
     return itemDetail(repos, item.id);
+  });
+
+  // Move many objects to one place (or out) at once.
+  app.post('/api/items/bulk-move', { schema: S.bulkMoveItems }, async (req, reply) => {
+    const { item_ids, to_place_id } = req.body;
+    const method = req.body.method ?? 'manual';
+    const userId = req.user?.id ?? null;
+    if (to_place_id != null && !repos.places.findById(to_place_id)) {
+      return reply.code(400).send({ error: 'to_place_id not found' });
+    }
+    let moved = 0;
+    tx(app.db, () => {
+      for (const id of item_ids) {
+        const item = repos.items.findById(id);
+        if (!item) continue; // skip unknown ids silently
+        const from = item.location_place_id;
+        if (from === to_place_id) continue; // already there → no-op
+        const action = to_place_id == null ? 'moved_out' : from == null ? 'moved_in' : 'relocated';
+        repos.items.setLocation(item.id, to_place_id);
+        repos.movements.log({
+          user_id: userId,
+          entity_type: 'item',
+          entity_id: item.id,
+          action,
+          from_place_id: from,
+          to_place_id,
+          method,
+          note: req.body.note ?? null,
+        });
+        moved++;
+      }
+    });
+    return { moved };
   });
 
   app.post('/api/items/:id/tags', { schema: S.itemTag }, async (req, reply) => {

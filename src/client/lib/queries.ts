@@ -10,9 +10,9 @@ import type {
   Code,
   ResolveResult,
   EntityType,
-  PlaceType,
   TagKind,
   MovementMethod,
+  User,
 } from '../../shared/types.ts';
 
 const qs = <T extends object>(params: T): string => {
@@ -36,7 +36,7 @@ export const useItem = (id: number) =>
   useQuery({ queryKey: ['item', id], queryFn: () => api.get<ItemDetail>(`/api/items/${id}`), enabled: id > 0 });
 
 // ---------- places ----------
-export const usePlaces = (opts: { parent?: number; root?: boolean; type?: PlaceType; tag?: number } = {}) =>
+export const usePlaces = (opts: { parent?: number; root?: boolean; tag?: number } = {}) =>
   useQuery({ queryKey: ['places', opts], queryFn: () => api.get<Place[]>(`/api/places${qs(opts)}`) });
 
 export const usePlace = (id: number) =>
@@ -81,6 +81,7 @@ export interface CreateItemInput {
   name: string;
   notes?: string | null;
   photo_id?: number | null;
+  price?: number | null;
   location_place_id?: number | null;
   code_value?: string;
   method?: MovementMethod;
@@ -96,7 +97,7 @@ export const useCreateItem = () => {
 export const useUpdateItem = (id: number) => {
   const inval = useInvalidator();
   return useMutation({
-    mutationFn: (body: { name?: string; notes?: string | null; photo_id?: number | null }) =>
+    mutationFn: (body: { name?: string; notes?: string | null; photo_id?: number | null; price?: number | null }) =>
       api.patch<ItemDetail>(`/api/items/${id}`, body),
     onSuccess: inval,
   });
@@ -128,7 +129,6 @@ export const useUntagItem = (id: number) => {
 
 export interface CreatePlaceInput {
   name: string;
-  type: PlaceType;
   parent_place_id?: number | null;
   info?: string | null;
   photo_id?: number | null;
@@ -146,7 +146,7 @@ export const useCreatePlace = () => {
 export const useUpdatePlace = (id: number) => {
   const inval = useInvalidator();
   return useMutation({
-    mutationFn: (body: { name?: string; info?: string | null; photo_id?: number | null; type?: PlaceType }) =>
+    mutationFn: (body: { name?: string; info?: string | null; photo_id?: number | null }) =>
       api.patch<PlaceDetail>(`/api/places/${id}`, body),
     onSuccess: inval,
   });
@@ -199,3 +199,43 @@ export async function printLabels(type: EntityType, count: number): Promise<void
   window.open(url, '_blank');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
+
+// ---------- setup / users ----------
+export const useSetupNeeded = () =>
+  useQuery({ queryKey: ['setup-needed'], queryFn: () => api.get<{ needed: boolean }>('/api/setup-needed') });
+
+export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: () => api.get<User[]>('/api/users') });
+
+export const useCreateUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { username: string; password: string }) => api.post<User>('/api/users', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+};
+export const useDeleteUser = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/api/users/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+};
+export const useChangePassword = () =>
+  useMutation({
+    mutationFn: (vars: { id: number; password: string }) =>
+      api.post(`/api/users/${vars.id}/password`, { password: vars.password }),
+  });
+
+// ---------- bulk move ----------
+export const useBulkMove = () => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (body: {
+      item_ids: number[];
+      to_place_id: number | null;
+      method?: MovementMethod;
+      note?: string | null;
+    }) => api.post<{ moved: number }>('/api/items/bulk-move', body),
+    onSuccess: inval,
+  });
+};

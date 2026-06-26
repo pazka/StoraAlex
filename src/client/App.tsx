@@ -12,6 +12,7 @@ import { PlaceFormPage } from './pages/PlaceForm.tsx';
 import { TagsPage } from './pages/Tags.tsx';
 import { MovementsPage } from './pages/Movements.tsx';
 import { LabelsPage } from './pages/Labels.tsx';
+import { UsersPage } from './pages/Users.tsx';
 
 export function App() {
   return (
@@ -35,6 +36,7 @@ export function App() {
           <Route path="/places/:id" element={<PlaceDetailPage />} />
           <Route path="/places/:id/edit" element={<PlaceFormPage />} />
           <Route path="/tags" element={<TagsPage />} />
+          <Route path="/users" element={<UsersPage />} />
           <Route path="/history" element={<MovementsPage />} />
           <Route path="/labels" element={<LabelsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

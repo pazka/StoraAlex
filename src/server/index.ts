@@ -1,12 +1,12 @@
 import { loadConfig, loadEnvFile } from './config.js';
 import { openDb } from './db/index.js';
 import { buildApp } from './app.js';
-import { runSeed } from './seed.js';
 
 loadEnvFile();
 const config = loadConfig();
 const db = openDb(config.dbPath);
-await runSeed(config, db);
+// No admin is seeded: on first run (no users) the app prompts to create the
+// first account via /api/auth/setup. See routes/auth.ts.
 
 const app = await buildApp(config, db);
 
