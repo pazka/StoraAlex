@@ -9,6 +9,9 @@ build/
 .env.*
 !.env.example
 *service-account*.json
+*google-sa*.json
+*-sa.json
+secrets/
 *.pem
 *.key
 

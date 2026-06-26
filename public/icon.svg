@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="StorAlex">
+  <rect width="512" height="512" rx="96" fill="#1f2933"/>
+  <!-- stacked crates -->
+  <g fill="none" stroke="#7bdff2" stroke-width="20" stroke-linejoin="round">
+    <rect x="96" y="120" width="150" height="130" rx="10"/>
+    <rect x="266" y="120" width="150" height="130" rx="10"/>
+    <rect x="181" y="280" width="150" height="130" rx="10"/>
+  </g>
+  <!-- little QR mark on the front crate -->
+  <g fill="#e4fbff">
+    <rect x="216" y="315" width="22" height="22"/>
+    <rect x="274" y="315" width="22" height="22"/>
+    <rect x="216" y="373" width="22" height="22"/>
+    <rect x="245" y="344" width="22" height="22"/>
+    <rect x="274" y="373" width="22" height="22"/>
+  </g>
+</svg>

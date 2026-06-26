@@ -1,0 +1,39 @@
+# StorAlex deployment. The app is proxy-agnostic: run it behind your existing
+# TLS-terminating reverse proxy (storalex.hosh.it -> 127.0.0.1:8080).
+#
+# Before `docker compose up`, create a .env (see .env.example):
+#   - LOCAL test over http://localhost:8080  -> NODE_ENV=development (Secure
+#     cookies off, so login works without TLS)
+#   - VPS / production behind TLS             -> NODE_ENV=production plus strong
+#     APP_PEPPER and SESSION_KEY, and SEED_ADMIN_USER/PASSWORD for the first boot.
+
+services:
+  storalex:
+    build: .
+    image: storalex:latest
+    container_name: storalex
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      PORT: "8080"
+      # Number of trusted reverse-proxy hops in front of the app (1 = a single
+      # proxy). Do NOT use "true" — that trusts a client-spoofable X-Forwarded-For
+      # and defeats per-IP rate limiting.
+      TRUST_PROXY: "1"
+    volumes:
+      - storalex-data:/data
+    ports:
+      # Bound to localhost only: the reverse proxy reaches it, the public
+      # internet does not. For a pure local demo this still works from the host.
+      - "127.0.0.1:8080:8080"
+    # Defense-in-depth: no privilege escalation, drop all Linux capabilities.
+    # (Image already runs as non-root.) Add `read_only: true` + a /tmp tmpfs if
+    # you want an immutable rootfs — the /data volume stays writable regardless.
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+
+volumes:
+  storalex-data:
