@@ -1,4 +1,6 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { S } from '../schemas.js';
 import { tx } from '../db/index.js';
 import { looksLikeCode } from '../../shared/ids.js';
@@ -22,6 +24,7 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
   app.get('/api/places', { schema: S.placesQuery }, async (req) => {
     const q = req.query;
+    if (q.archived) return repos.places.list({ archived: true });
     const parent = q.root ? null : typeof q.parent === 'number' ? q.parent : undefined;
     return repos.places.list({ parent, tag: q.tag });
   });
@@ -177,5 +180,58 @@ export const placeRoutes: FastifyPluginAsyncTypebox = async (app) => {
       });
     }
     return placeDetail(repos, place.id);
+  });
+
+  app.post('/api/places/:id/archive', { schema: S.byId }, async (req, reply) => {
+    const place = repos.places.findById(req.params.id);
+    if (!place) return reply.code(404).send({ error: 'place not found' });
+    tx(app.db, () => {
+      repos.places.setArchived(place.id, true);
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'place',
+        entity_id: place.id,
+        action: 'archived',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    });
+    return { ok: true };
+  });
+
+  app.post('/api/places/:id/unarchive', { schema: S.byId }, async (req, reply) => {
+    const place = repos.places.findById(req.params.id);
+    if (!place) return reply.code(404).send({ error: 'place not found' });
+    tx(app.db, () => {
+      repos.places.setArchived(place.id, false);
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'place',
+        entity_id: place.id,
+        action: 'unarchived',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    });
+    return { ok: true };
+  });
+
+  // Permanent delete — only for archived places. Cascades to nested places and
+  // the objects inside them (and their codes/tags/photos).
+  app.delete('/api/places/:id', { schema: S.byId }, async (req, reply) => {
+    const place = repos.places.findById(req.params.id);
+    if (!place) return reply.code(404).send({ error: 'place not found' });
+    if (place.archived_at == null) {
+      return reply.code(400).send({ error: 'archive the place before deleting it permanently' });
+    }
+    const result = tx(app.db, () => repos.hardDeletePlaceSubtree(place.id));
+    for (const p of result.photoPaths) {
+      await fs.unlink(path.join(app.appConfig.mediaDir, p)).catch(() => {});
+    }
+    return { ok: true, placesDeleted: result.placesDeleted, itemsDeleted: result.itemsDeleted };
   });
 };

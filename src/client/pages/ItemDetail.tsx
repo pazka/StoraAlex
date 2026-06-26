@@ -1,16 +1,27 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useItem, useMoveItem, useTagItem, useUntagItem, useTags } from '../lib/queries.ts';
-import { Spinner, ErrorMsg, Thumb, Crumbs, StatusBadge, TagChip } from '../components/ui.tsx';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import {
+  useItem,
+  useMoveItem,
+  useTagItem,
+  useUntagItem,
+  useTags,
+  useArchiveItem,
+  useDeleteItem,
+} from '../lib/queries.ts';
+import { Spinner, ErrorMsg, Thumb, Crumbs, StatusBadge } from '../components/ui.tsx';
 import { PlacePicker } from '../components/PlacePicker.tsx';
 
 export function ItemDetailPage() {
   const id = Number(useParams().id);
+  const nav = useNavigate();
   const item = useItem(id);
   const move = useMoveItem(id);
   const tagItem = useTagItem(id);
   const untag = useUntagItem(id);
   const tags = useTags();
+  const archive = useArchiveItem(id);
+  const del = useDeleteItem();
   const [picking, setPicking] = useState(false);
   const [addingTag, setAddingTag] = useState(false);
 
@@ -105,6 +116,35 @@ export function ItemDetailPage() {
           History
         </Link>
       </div>
+
+      {it.archived_at ? (
+        <div className="card" style={{ borderColor: 'var(--danger)' }}>
+          <div className="small" style={{ marginBottom: 10 }}>
+            📦 Archived. Restore it, or delete it permanently.
+          </div>
+          <div className="row">
+            <button className="btn grow" onClick={() => archive.mutate(false)} disabled={archive.isPending}>
+              Restore
+            </button>
+            <button
+              className="btn danger grow"
+              disabled={del.isPending}
+              onClick={() => {
+                if (window.confirm(`Permanently delete "${it.name}"? This cannot be undone.`)) {
+                  del.mutate(id, { onSuccess: () => nav('/items') });
+                }
+              }}
+            >
+              Delete permanently
+            </button>
+          </div>
+          <ErrorMsg error={archive.error || del.error} />
+        </div>
+      ) : (
+        <button className="btn block" onClick={() => archive.mutate(true)} disabled={archive.isPending}>
+          Archive
+        </button>
+      )}
 
       {picking && (
         <PlacePicker

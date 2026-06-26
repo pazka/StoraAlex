@@ -22,6 +22,7 @@ import { tagRoutes } from './routes/tags.js';
 import { movementRoutes } from './routes/movements.js';
 import { mediaRoutes } from './routes/media.js';
 import { sheetRoutes } from './routes/sheet.js';
+import { dataRoutes } from './routes/data.js';
 
 /** Requests that don't require an authenticated session. */
 function needsAuth(url: string): boolean {
@@ -113,6 +114,7 @@ export async function buildApp(config: Config, db: DB) {
   await app.register(movementRoutes);
   await app.register(mediaRoutes);
   await app.register(sheetRoutes);
+  await app.register(dataRoutes);
 
   // Serve the built PWA (production / after `npm run build`). In dev, Vite
   // serves the client and proxies the API, so this block is skipped.

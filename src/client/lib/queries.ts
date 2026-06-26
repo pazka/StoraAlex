@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, postForBlob } from './api.ts';
+import { api, postForBlob, importXlsx } from './api.ts';
 import type {
   Item,
   ItemDetail,
@@ -28,6 +28,7 @@ export interface ItemFilter {
   place?: number;
   status?: 'in' | 'out';
   q?: string;
+  archived?: boolean;
 }
 export const useItems = (filter: ItemFilter = {}) =>
   useQuery({ queryKey: ['items', filter], queryFn: () => api.get<Item[]>(`/api/items${qs(filter)}`) });
@@ -36,7 +37,7 @@ export const useItem = (id: number) =>
   useQuery({ queryKey: ['item', id], queryFn: () => api.get<ItemDetail>(`/api/items/${id}`), enabled: id > 0 });
 
 // ---------- places ----------
-export const usePlaces = (opts: { parent?: number; root?: boolean; tag?: number } = {}) =>
+export const usePlaces = (opts: { parent?: number; root?: boolean; tag?: number; archived?: boolean } = {}) =>
   useQuery({ queryKey: ['places', opts], queryFn: () => api.get<Place[]>(`/api/places${qs(opts)}`) });
 
 export const usePlace = (id: number) =>
@@ -225,6 +226,54 @@ export const useChangePassword = () =>
     mutationFn: (vars: { id: number; password: string }) =>
       api.post(`/api/users/${vars.id}/password`, { password: vars.password }),
   });
+
+// ---------- archive / delete / import ----------
+export const useArchiveItem = (id: number) => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (archived: boolean) => api.post(`/api/items/${id}/${archived ? 'archive' : 'unarchive'}`),
+    onSuccess: inval,
+  });
+};
+export const useDeleteItem = () => {
+  const inval = useInvalidator();
+  return useMutation({ mutationFn: (id: number) => api.del(`/api/items/${id}`), onSuccess: inval });
+};
+export const useArchivePlace = (id: number) => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (archived: boolean) => api.post(`/api/places/${id}/${archived ? 'archive' : 'unarchive'}`),
+    onSuccess: inval,
+  });
+};
+export const useDeletePlace = () => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (id: number) => api.del<{ placesDeleted: number; itemsDeleted: number }>(`/api/places/${id}`),
+    onSuccess: inval,
+  });
+};
+// List-level variants (take the id at call time, for the archive list).
+export const useSetItemArchived = () => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (v: { id: number; archived: boolean }) =>
+      api.post(`/api/items/${v.id}/${v.archived ? 'archive' : 'unarchive'}`),
+    onSuccess: inval,
+  });
+};
+export const useSetPlaceArchived = () => {
+  const inval = useInvalidator();
+  return useMutation({
+    mutationFn: (v: { id: number; archived: boolean }) =>
+      api.post(`/api/places/${v.id}/${v.archived ? 'archive' : 'unarchive'}`),
+    onSuccess: inval,
+  });
+};
+export const useImportXlsx = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (file: File) => importXlsx(file), onSuccess: () => qc.invalidateQueries() });
+};
 
 // ---------- bulk move ----------
 export const useBulkMove = () => {

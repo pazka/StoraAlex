@@ -13,7 +13,7 @@ export function Layout() {
         <span className="spacer" />
         {user && (
           <>
-            <Link to="/users" className="small" style={{ marginRight: 4 }} title="Users">
+            <Link to="/admin" className="small" style={{ marginRight: 4 }} title="Admin">
               👤 {user.username}
             </Link>
             <button className="btn" style={{ minHeight: 36, padding: '6px 12px' }} onClick={() => void logout()}>

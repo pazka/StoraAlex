@@ -84,6 +84,20 @@ While doing this I also fixed a latent validation bug: ajv's type coercion was t
 
 All verified end-to-end in the browser (scanned a place + two objects → CONFIRM moved both; scanned a blank label on the create form → object created with that exact code).
 
+## Round 4 — archive, permanent delete, Excel import/export, bright theme (2026-06-26)
+
+- **Bright/light theme** — switched the whole UI to a light, high-contrast palette for a well-lit room.
+- **Archive** (objects & places). Archive from the item/place page; archived things disappear from the normal lists and movement is hidden. Restore any time. Migration `005` adds the field (and `archived`/`unarchived` to the history).
+- **Permanent delete** — only available *after* archiving (so you can't nuke something by accident). Reachable from the item/place page or the Archive list (👤 → Admin → Archive).
+  - **⚠️ Cascade on places:** permanently deleting a place also deletes every nested place **and the objects inside them** (and their codes/tags/photos). The confirm dialog spells this out and reports how many were removed. I took "delete on cascade" literally — if you'd rather a place delete *keep* the objects (just send them "out"), say the word and I'll flip it.
+  - The append-only history rows survive deletions (audit trail), they just keep the old ids.
+- **Excel export/import** (👤 → Admin → "Data (Excel)").
+  - **Export** → one `.xlsx` with **Places / Items / Tags** sheets.
+  - **Import** the same template back. Rows are matched by their **QR code**, so you can bulk-edit names/prices/locations/tags in Excel and re-import — it updates existing rows and creates new ones. Parents/locations reference other rows by code (`parent_code`, `place_code`); tags are comma-separated names. Import runs in one transaction and returns a summary (created/updated counts + any skipped rows).
+  - Library: `exceljs` (pure JS, no install scripts). It pulled a stale transitive `uuid` with a moderate advisory — pinned via an override to the patched `uuid@14`, so `npm audit` is **clean (0 vulnerabilities)**.
+
+All verified end-to-end in the browser and with 36 passing tests.
+
 ## Security review (multi-agent adversarial pass)
 
 I ran an 8-dimension adversarial security review (auth/session, SQL injection, input validation, uploads, headers/CSP, secrets/config, supply-chain/Docker, business-logic) and verified every finding against the actual code. **No critical or high issues. Zero SQL injection** (all queries parameterized). 20 lower-severity findings were confirmed; I fixed the meaningful ones:

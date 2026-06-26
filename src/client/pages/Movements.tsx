@@ -12,6 +12,8 @@ const ACTION_LABEL: Record<MovementAction, string> = {
   tagged: 'Tagged',
   untagged: 'Untagged',
   retired: 'Retired',
+  archived: 'Archived',
+  unarchived: 'Restored',
 };
 
 export function MovementsPage() {

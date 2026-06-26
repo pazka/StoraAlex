@@ -45,6 +45,7 @@ export const S = {
       place: Type.Optional(Id),
       status: Type.Optional(Type.Union([Type.Literal('in'), Type.Literal('out')])),
       q: Type.Optional(Type.String({ maxLength: 200 })),
+      archived: Type.Optional(Type.Boolean()),
     }),
   },
   createItem: {
@@ -88,6 +89,7 @@ export const S = {
       parent: Type.Optional(Id),
       root: Type.Optional(Type.Boolean()),
       tag: Type.Optional(Id),
+      archived: Type.Optional(Type.Boolean()),
     }),
   },
   createPlace: {

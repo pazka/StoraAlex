@@ -1,16 +1,17 @@
 :root {
-  --bg: #11181c;
-  --surface: #1f2933;
-  --surface-2: #2a3a47;
-  --border: #3a4a57;
-  --text: #e4eef2;
-  --muted: #93a4af;
-  --accent: #7bdff2;
-  --accent-ink: #06323d;
-  --danger: #ff6b6b;
-  --ok: #7be0a4;
+  /* Bright/light theme — high contrast for a well-lit room. */
+  --bg: #f2f6fa;
+  --surface: #ffffff;
+  --surface-2: #e8eef5;
+  --border: #c8d4e0;
+  --text: #14202c;
+  --muted: #56697b;
+  --accent: #0a8fd8;
+  --accent-ink: #ffffff;
+  --danger: #e0353f;
+  --ok: #11a35a;
   --radius: 12px;
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }

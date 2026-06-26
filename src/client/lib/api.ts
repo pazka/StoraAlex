@@ -38,6 +38,25 @@ export async function uploadMedia(file: File): Promise<{ photo_id: number; width
   return data;
 }
 
+export interface ImportSummary {
+  tagsCreated: number;
+  placesCreated: number;
+  placesUpdated: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  errors: string[];
+}
+
+/** Upload an .xlsx workbook to import stock; returns the import summary. */
+export async function importXlsx(file: File): Promise<ImportSummary> {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch('/api/import.xlsx', { method: 'POST', credentials: 'same-origin', body: fd });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new ApiError(res.status, (data && data.error) || 'import failed');
+  return data as ImportSummary;
+}
+
 /** POST that returns a binary blob (used for the label-sheet PDF). */
 export async function postForBlob(path: string, body: unknown): Promise<Blob> {
   const res = await fetch(path, {

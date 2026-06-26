@@ -35,8 +35,8 @@ export default defineConfig({
         name: 'StorAlex',
         short_name: 'StorAlex',
         description: 'Storage-unit inventory: scan QR labels in and out.',
-        theme_color: '#1f2933',
-        background_color: '#1f2933',
+        theme_color: '#0a8fd8',
+        background_color: '#f2f6fa',
         display: 'standalone',
         start_url: '/',
         icons: [

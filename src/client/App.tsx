@@ -13,6 +13,8 @@ import { TagsPage } from './pages/Tags.tsx';
 import { MovementsPage } from './pages/Movements.tsx';
 import { LabelsPage } from './pages/Labels.tsx';
 import { UsersPage } from './pages/Users.tsx';
+import { AdminPage } from './pages/Admin.tsx';
+import { ArchivePage } from './pages/Archive.tsx';
 
 export function App() {
   return (
@@ -36,6 +38,8 @@ export function App() {
           <Route path="/places/:id" element={<PlaceDetailPage />} />
           <Route path="/places/:id/edit" element={<PlaceFormPage />} />
           <Route path="/tags" element={<TagsPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/archive" element={<ArchivePage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/history" element={<MovementsPage />} />
           <Route path="/labels" element={<LabelsPage />} />

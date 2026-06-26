@@ -1,4 +1,6 @@
 import type { FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { S } from '../schemas.js';
 import { tx } from '../db/index.js';
 import { looksLikeCode } from '../../shared/ids.js';
@@ -20,7 +22,7 @@ export const itemRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
   app.get('/api/items', { schema: S.itemsQuery }, async (req) => {
     const q = req.query;
-    return repos.items.list({ tag: q.tag, place: q.place, status: q.status, q: q.q });
+    return repos.items.list({ tag: q.tag, place: q.place, status: q.status, q: q.q, archived: q.archived });
   });
 
   app.get('/api/items/:id', { schema: S.byId }, async (req, reply) => {
@@ -221,5 +223,57 @@ export const itemRoutes: FastifyPluginAsyncTypebox = async (app) => {
       });
     }
     return itemDetail(repos, item.id);
+  });
+
+  app.post('/api/items/:id/archive', { schema: S.byId }, async (req, reply) => {
+    const item = repos.items.findById(req.params.id);
+    if (!item) return reply.code(404).send({ error: 'item not found' });
+    tx(app.db, () => {
+      repos.items.setArchived(item.id, true);
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'item',
+        entity_id: item.id,
+        action: 'archived',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    });
+    return { ok: true };
+  });
+
+  app.post('/api/items/:id/unarchive', { schema: S.byId }, async (req, reply) => {
+    const item = repos.items.findById(req.params.id);
+    if (!item) return reply.code(404).send({ error: 'item not found' });
+    tx(app.db, () => {
+      repos.items.setArchived(item.id, false);
+      repos.movements.log({
+        user_id: req.user?.id ?? null,
+        entity_type: 'item',
+        entity_id: item.id,
+        action: 'unarchived',
+        from_place_id: null,
+        to_place_id: null,
+        method: 'manual',
+        note: null,
+      });
+    });
+    return { ok: true };
+  });
+
+  // Permanent delete — only for already-archived items.
+  app.delete('/api/items/:id', { schema: S.byId }, async (req, reply) => {
+    const item = repos.items.findById(req.params.id);
+    if (!item) return reply.code(404).send({ error: 'item not found' });
+    if (item.archived_at == null) {
+      return reply.code(400).send({ error: 'archive the item before deleting it permanently' });
+    }
+    const { photoPath } = tx(app.db, () => repos.items.hardDelete(item.id));
+    if (photoPath) {
+      await fs.unlink(path.join(app.appConfig.mediaDir, photoPath)).catch(() => {});
+    }
+    return { ok: true, deleted: 1 };
   });
 };

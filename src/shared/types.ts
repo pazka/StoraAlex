@@ -13,7 +13,9 @@ export type MovementAction =
   | 'edited'
   | 'tagged'
   | 'untagged'
-  | 'retired';
+  | 'retired'
+  | 'archived'
+  | 'unarchived';
 
 export interface User {
   id: number;
@@ -37,6 +39,7 @@ export interface Place {
   photo_id: number | null;
   info: string | null;
   parent_place_id: number | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +52,7 @@ export interface Item {
   location_place_id: number | null;
   notes: string | null;
   price: number | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }

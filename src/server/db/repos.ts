@@ -117,8 +117,8 @@ export function createRepos(db: DB) {
     setParent: (id: number, parentId: number | null): void => {
       run("UPDATE place SET parent_place_id = ?, updated_at = datetime('now') WHERE id = ?", [parentId, id]);
     },
-    list: (filter: { parent?: number | null; tag?: number }): Place[] => {
-      const where: string[] = [];
+    list: (filter: { parent?: number | null; tag?: number; archived?: boolean }): Place[] => {
+      const where: string[] = [filter.archived ? 'p.archived_at IS NOT NULL' : 'p.archived_at IS NULL'];
       const params: unknown[] = [];
       let join = '';
       if (typeof filter.tag === 'number') {
@@ -145,7 +145,7 @@ export function createRepos(db: DB) {
     removeTag: (placeId: number, tagId: number): boolean =>
       run('DELETE FROM place_tag WHERE place_id = ? AND tag_id = ?', [placeId, tagId]).changes > 0,
     children: (parentId: number): Place[] =>
-      all<Place>('SELECT * FROM place WHERE parent_place_id = ? ORDER BY name', [parentId]),
+      all<Place>('SELECT * FROM place WHERE parent_place_id = ? AND archived_at IS NULL ORDER BY name', [parentId]),
     /** Ancestry from root down to the place itself (for breadcrumbs). */
     breadcrumb: (id: number): PlaceBreadcrumb[] =>
       all<PlaceBreadcrumb>(
@@ -174,7 +174,75 @@ export function createRepos(db: DB) {
       }
       return false;
     },
+    setArchived: (id: number, archived: boolean): void => {
+      run(
+        `UPDATE place SET archived_at = ${archived ? "datetime('now')" : 'NULL'}, updated_at = datetime('now') WHERE id = ?`,
+        [id],
+      );
+    },
+    /** All place ids in the subtree rooted at id (including id itself). */
+    descendantIds: (id: number): number[] =>
+      all<{ id: number }>(
+        `WITH RECURSIVE sub(id) AS (
+           SELECT id FROM place WHERE id = ?
+           UNION ALL
+           SELECT p.id FROM place p JOIN sub ON p.parent_place_id = sub.id
+         ) SELECT id FROM sub`,
+        [id],
+      ).map((r) => r.id),
+    findByCode: (codeDisplay: string): Place | undefined =>
+      get<Place>('SELECT * FROM place WHERE code_display = ?', [codeDisplay]),
+    exportRows: (): Record<string, unknown>[] =>
+      all<Record<string, unknown>>(
+        `SELECT p.code_display AS code, p.name, parent.code_display AS parent_code, p.info,
+                CASE WHEN p.archived_at IS NULL THEN 'no' ELSE 'yes' END AS archived
+         FROM place p LEFT JOIN place parent ON parent.id = p.parent_place_id
+         ORDER BY p.code_display`,
+      ),
   };
+
+  /**
+   * Permanently delete a place subtree: descendant places AND all items located
+   * in them, with their codes/tags. Returns photo paths to unlink. Wrap in a tx.
+   */
+  function hardDeletePlaceSubtree(rootId: number): {
+    photoPaths: string[];
+    placesDeleted: number;
+    itemsDeleted: number;
+  } {
+    const ids = places.descendantIds(rootId);
+    if (ids.length === 0) return { photoPaths: [], placesDeleted: 0, itemsDeleted: 0 };
+    const ph = ids.map(() => '?').join(',');
+    const photoIds: number[] = [];
+
+    const itemRows = all<{ id: number; photo_id: number | null }>(
+      `SELECT id, photo_id FROM item WHERE location_place_id IN (${ph})`,
+      ids,
+    );
+    const itemIds = itemRows.map((i) => i.id);
+    itemRows.forEach((i) => i.photo_id != null && photoIds.push(i.photo_id));
+    all<{ photo_id: number | null }>(`SELECT photo_id FROM place WHERE id IN (${ph})`, ids).forEach(
+      (r) => r.photo_id != null && photoIds.push(r.photo_id),
+    );
+
+    if (itemIds.length) {
+      const ip = itemIds.map(() => '?').join(',');
+      run(`DELETE FROM code WHERE entity_type = 'item' AND entity_id IN (${ip})`, itemIds);
+      run(`DELETE FROM item WHERE id IN (${ip})`, itemIds); // item_tag cascades
+    }
+    run(`DELETE FROM code WHERE entity_type = 'place' AND entity_id IN (${ph})`, ids);
+    run(`DELETE FROM place WHERE id IN (${ph})`, ids); // place_tag cascades
+
+    const photoPaths: string[] = [];
+    for (const pid of photoIds) {
+      const row = get<{ path: string }>('SELECT path FROM photo WHERE id = ?', [pid]);
+      if (row) {
+        photoPaths.push(row.path);
+        run('DELETE FROM photo WHERE id = ?', [pid]);
+      }
+    }
+    return { photoPaths, placesDeleted: ids.length, itemsDeleted: itemIds.length };
+  }
 
   // ============================ items ============================
   const items = {
@@ -198,8 +266,14 @@ export function createRepos(db: DB) {
     setLocation: (id: number, placeId: number | null): void => {
       run("UPDATE item SET location_place_id = ?, updated_at = datetime('now') WHERE id = ?", [placeId, id]);
     },
-    list: (filter: { tag?: number; place?: number | null; status?: 'in' | 'out'; q?: string }): Item[] => {
-      const where: string[] = [];
+    list: (filter: {
+      tag?: number;
+      place?: number | null;
+      status?: 'in' | 'out';
+      q?: string;
+      archived?: boolean;
+    }): Item[] => {
+      const where: string[] = [filter.archived ? 'i.archived_at IS NOT NULL' : 'i.archived_at IS NULL'];
       const params: unknown[] = [];
       let join = '';
       if (typeof filter.tag === 'number') {
@@ -231,6 +305,40 @@ export function createRepos(db: DB) {
       run('INSERT OR IGNORE INTO item_tag (item_id, tag_id) VALUES (?, ?)', [itemId, tagId]).changes > 0,
     removeTag: (itemId: number, tagId: number): boolean =>
       run('DELETE FROM item_tag WHERE item_id = ? AND tag_id = ?', [itemId, tagId]).changes > 0,
+    clearTags: (itemId: number): void => {
+      run('DELETE FROM item_tag WHERE item_id = ?', [itemId]);
+    },
+    setArchived: (id: number, archived: boolean): void => {
+      run(
+        `UPDATE item SET archived_at = ${archived ? "datetime('now')" : 'NULL'}, updated_at = datetime('now') WHERE id = ?`,
+        [id],
+      );
+    },
+    /** Permanently delete an item: its codes, tag links, and photo. Returns the photo path to unlink. */
+    hardDelete: (id: number): { photoPath: string | null } => {
+      const photoId = get<{ photo_id: number | null }>('SELECT photo_id FROM item WHERE id = ?', [id])?.photo_id ?? null;
+      let photoPath: string | null = null;
+      if (photoId != null) {
+        const ph = get<{ path: string }>('SELECT path FROM photo WHERE id = ?', [photoId]);
+        if (ph) {
+          photoPath = ph.path;
+          run('DELETE FROM photo WHERE id = ?', [photoId]); // item.photo_id -> NULL via FK
+        }
+      }
+      run("DELETE FROM code WHERE entity_type = 'item' AND entity_id = ?", [id]);
+      run('DELETE FROM item WHERE id = ?', [id]); // item_tag cascades
+      return { photoPath };
+    },
+    findByCode: (codeDisplay: string): Item | undefined =>
+      get<Item>('SELECT * FROM item WHERE code_display = ?', [codeDisplay]),
+    exportRows: (): Record<string, unknown>[] =>
+      all<Record<string, unknown>>(
+        `SELECT i.code_display AS code, i.name, p.code_display AS place_code, i.price, i.notes,
+                CASE WHEN i.archived_at IS NULL THEN 'no' ELSE 'yes' END AS archived,
+                (SELECT group_concat(t.name, ', ') FROM item_tag it JOIN tag t ON t.id = it.tag_id WHERE it.item_id = i.id) AS tags
+         FROM item i LEFT JOIN place p ON p.id = i.location_place_id
+         ORDER BY i.code_display`,
+      ),
   };
 
   // ============================ codes ============================
@@ -291,6 +399,7 @@ export function createRepos(db: DB) {
       num(run('INSERT INTO tag (name, color, kind) VALUES (?, ?, ?)', [name, color, kind]).lastInsertRowid),
     list: (): Tag[] => all<Tag>('SELECT * FROM tag ORDER BY kind, name'),
     findById: (id: number): Tag | undefined => get<Tag>('SELECT * FROM tag WHERE id = ?', [id]),
+    findByName: (name: string): Tag | undefined => get<Tag>('SELECT * FROM tag WHERE name = ?', [name]),
   };
 
   // ============================ movements (append-only) ============================
@@ -344,7 +453,7 @@ export function createRepos(db: DB) {
     },
   };
 
-  return { users, sessions, photos, places, items, codes, tags, movements };
+  return { users, sessions, photos, places, items, codes, tags, movements, hardDeletePlaceSubtree };
 }
 
 export type Repos = ReturnType<typeof createRepos>;
