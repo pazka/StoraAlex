@@ -10,7 +10,7 @@ Self-hosted personal storage-unit inventory. Pre-print QR labels, scan objects a
 
 ## Status
 
-Milestones **M0–M6 + M8** are implemented, tested, and verified end-to-end in a browser. **M7 (Google Sheet mirror) is deferred** — endpoints exist in `src/server/routes/sheet.ts` but return 501 until a Google service account is configured. The deferral and the open questions are tracked in docs/OWNER-NOTES.md.
+Milestones **M0–M8** are implemented, tested, and verified end-to-end in a browser — including **M7** (read-only Google Sheet mirror: `src/server/lib/sheet.ts` pushes Places/Items/Tags to a Sheet, debounced on change via an onResponse hook + periodic reconcile; configured by `SHEET_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON`). Sheet failures are isolated (the app never breaks). Open questions tracked in docs/OWNER-NOTES.md.
 
 ## Commands
 

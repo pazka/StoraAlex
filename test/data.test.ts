@@ -89,6 +89,11 @@ describe('excel export / import round-trip', () => {
     expect(after.price).toBe(42);
   });
 
+  it('reports the Google Sheet mirror as not configured (no creds in tests)', async () => {
+    expect((await get('/api/sheet/status')).json().configured).toBe(false);
+    expect((await post('/api/sheet/export')).statusCode).toBe(501);
+  });
+
   it('buildWorkbook + readWorkbook preserve rows', async () => {
     const buf = await buildWorkbook({
       places: [{ code: 'PLC-000999', name: 'Test', parent_code: '', info: '', archived: 'no' }],

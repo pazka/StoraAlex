@@ -20,6 +20,17 @@ const prune = setInterval(() => {
 }, 60 * 60 * 1000);
 prune.unref();
 
+// Google Sheet mirror: push once on boot, then reconcile periodically (the
+// debounced on-change push handles freshness between reconciles).
+if (app.sheetMirror.configured) {
+  app.sheetMirror.exportNow().catch((err) => app.log.warn(`initial sheet sync failed: ${(err as Error).message}`));
+  const reconcile = setInterval(
+    () => void app.sheetMirror.exportNow().catch((err) => app.log.warn(`sheet sync failed: ${(err as Error).message}`)),
+    5 * 60 * 1000,
+  );
+  reconcile.unref();
+}
+
 try {
   await app.listen({ port: config.port, host: config.host });
   app.log.info(`StorAlex listening on http://${config.host}:${config.port} (env=${config.env})`);

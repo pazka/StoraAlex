@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { Config } from './config.js';
 import type { DB } from './db/index.js';
 import { createRepos } from './db/repos.js';
+import { createSheetMirror } from './lib/sheet.js';
 import { sessionCookieName, hashToken } from './auth/session.js';
 
 import { authRoutes } from './routes/auth.js';
@@ -55,6 +56,7 @@ export async function buildApp(config: Config, db: DB) {
   app.decorate('appConfig', config);
   app.decorate('db', db);
   app.decorate('repos', repos);
+  app.decorate('sheetMirror', createSheetMirror(config, repos));
   app.decorateRequest('user', null);
 
   await app.register(cookie, { secret: config.sessionKey });
@@ -98,6 +100,19 @@ export async function buildApp(config: Config, db: DB) {
       }
     }
     return reply.code(401).send({ error: 'unauthorized' });
+  });
+
+  // After any successful inventory-changing request, debounce a push to the
+  // Google Sheet mirror. No-op unless the mirror is configured.
+  app.addHook('onResponse', async (req, reply) => {
+    if (!app.sheetMirror.configured) return;
+    if (req.method !== 'POST' && req.method !== 'PATCH' && req.method !== 'DELETE') return;
+    if (reply.statusCode >= 400) return;
+    const p = req.url.split('?')[0] ?? req.url;
+    if (!p.startsWith('/api/') || p.startsWith('/api/sheet') || p.startsWith('/api/auth') || p.startsWith('/api/media')) {
+      return;
+    }
+    app.sheetMirror.scheduleSync();
   });
 
   app.get('/healthz', async () => {

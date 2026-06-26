@@ -275,6 +275,25 @@ export const useImportXlsx = () => {
   return useMutation({ mutationFn: (file: File) => importXlsx(file), onSuccess: () => qc.invalidateQueries() });
 };
 
+// ---------- Google Sheet mirror ----------
+export interface SheetStatus {
+  configured: boolean;
+  sheetId: string | null;
+  url: string | null;
+  lastSync: string | null;
+  lastError: string | null;
+  syncing: boolean;
+}
+export const useSheetStatus = () =>
+  useQuery({ queryKey: ['sheet-status'], queryFn: () => api.get<SheetStatus>('/api/sheet/status') });
+export const useSyncSheet = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean; status: SheetStatus }>('/api/sheet/export'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sheet-status'] }),
+  });
+};
+
 // ---------- bulk move ----------
 export const useBulkMove = () => {
   const inval = useInvalidator();

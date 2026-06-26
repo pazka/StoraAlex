@@ -51,7 +51,7 @@ Camera scanning needs a device with a camera + HTTPS (or localhost); on a deskto
 ## Still open (don't block deployment)
 
 - **History retention.** Movement log is append-only and kept **forever** (now DB-enforced). Confirm that's what you want.
-- **Google Sheet mirror (M7).** Deferred. When ready: create a Google Cloud project + service account, share the target sheet with the service-account email, set `SHEET_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON`, and I'll wire export/import. Confirm tab naming (one spreadsheet; tabs items / places / movements / codes / tags?).
+- ~~**Google Sheet mirror (M7).**~~ **Done** (read-only) — see Round 5 below.
 
 ## Smaller things I deferred (say the word and I'll add them)
 
@@ -97,6 +97,14 @@ All verified end-to-end in the browser (scanned a place + two objects → CONFIR
   - Library: `exceljs` (pure JS, no install scripts). It pulled a stale transitive `uuid` with a moderate advisory — pinned via an override to the patched `uuid@14`, so `npm audit` is **clean (0 vulnerabilities)**.
 
 All verified end-to-end in the browser and with 36 passing tests.
+
+## Round 5 — Google Sheet mirror (M7), live (2026-06-26)
+
+- **Done and verified against your real sheet** (`getkeywords-157712`). The app pushes a **read-only** copy of Places / Items / Tags to the Sheet — automatically (debounced after any change + a 5-min reconcile) and via **Admin → Sync now**. Verified: the sheet filled with the tabs, and creating a tag in the app showed up in the sheet ~6s later.
+- **Failures are isolated** (as you asked): a Sheets error never breaks the app — it keeps serving, logs one clean line, and shows one actionable message in Admin (e.g. *"share the Sheet with the service account … as Editor"*). The 403 you hit was exactly that; sharing the sheet fixed it.
+- **Your key was a leak risk** — the downloaded `getkeywords-157712-b37e69675a35.json` was sitting in the repo root and its name didn't match the ignore rules. It was never committed; I moved it to the gitignored **`secrets/google-sa.json`** and pointed `.env` there. **Always put service-account keys in `secrets/`** (or `/run/secrets/` on the VPS) — never the repo root.
+- Library: `@googleapis/sheets` (pure JS, no install scripts). `npm audit` still **clean (0)**.
+- Read-only by design. If you later want collaborators to add tags *in the sheet* and pull them back, that's the two-way option — say the word.
 
 ## Security review (multi-agent adversarial pass)
 

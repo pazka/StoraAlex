@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useImportXlsx } from '../lib/queries.ts';
+import { useImportXlsx, useSheetStatus, useSyncSheet } from '../lib/queries.ts';
 import { ErrorMsg } from '../components/ui.tsx';
 import type { ImportSummary } from '../lib/api.ts';
 
@@ -8,6 +8,8 @@ const XLSX_ACCEPT = '.xlsx,application/vnd.openxmlformats-officedocument.spreads
 
 export function AdminPage() {
   const importMut = useImportXlsx();
+  const sheet = useSheetStatus();
+  const syncSheet = useSyncSheet();
   const [summary, setSummary] = useState<ImportSummary | null>(null);
 
   async function onFile(e: ChangeEvent<HTMLInputElement>) {
@@ -48,6 +50,39 @@ export function AdminPage() {
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      <div className="card">
+        <b>Google Sheet (read-only mirror)</b>
+        {sheet.data && !sheet.data.configured ? (
+          <p className="small muted">
+            Not configured. Set <code>SHEET_ID</code> and <code>GOOGLE_SERVICE_ACCOUNT_JSON</code> on the server (see
+            the setup steps), then collaborators can consult a live, read-only copy of places, items and tags.
+          </p>
+        ) : (
+          <>
+            <p className="small muted">
+              Live one-way mirror of places, items and tags.{' '}
+              {sheet.data?.url && (
+                <a href={sheet.data.url} target="_blank" rel="noreferrer">
+                  Open the sheet ↗
+                </a>
+              )}
+            </p>
+            <button
+              className="btn primary block"
+              onClick={() => syncSheet.mutate()}
+              disabled={syncSheet.isPending || sheet.data?.syncing}
+            >
+              {syncSheet.isPending || sheet.data?.syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+            <div className="small muted" style={{ marginTop: 8 }}>
+              {sheet.data?.lastSync ? `Last synced: ${new Date(sheet.data.lastSync).toLocaleString()}` : 'Not synced yet.'}
+            </div>
+            <ErrorMsg error={syncSheet.error} />
+            {sheet.data?.lastError && <p className="error small">Last sync error: {sheet.data.lastError}</p>}
+          </>
         )}
       </div>
 

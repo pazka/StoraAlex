@@ -128,6 +128,22 @@ The image is a multi-stage build that compiles everything and runs as a non-root
 
 ---
 
+## Google Sheet mirror (read-only)
+
+The app can push a live, read-only copy of the inventory to a Google Sheet (Places / Items / Tags tabs) so other people can consult it. The Sheet never writes back — SQLite stays the source of truth. Setup:
+
+1. Google Cloud → create/choose a project → **enable the Google Sheets API**.
+2. Create a **service account**, add a **JSON key**, download it. Note its email (`…@….iam.gserviceaccount.com`).
+3. Create a Sheet; copy its id from the URL (`/d/<ID>/edit`).
+4. **Share the Sheet with the service-account email as Editor.** Share it with viewers (or "anyone with link → Viewer") for read access.
+5. Put the key file somewhere gitignored (e.g. `secrets/google-sa.json` or `/run/secrets/…` on the VPS) and set:
+   ```env
+   SHEET_ID=<the id>
+   GOOGLE_SERVICE_ACCOUNT_JSON=secrets/google-sa.json   # path, or inline JSON
+   ```
+
+It syncs automatically (debounced) after any change, on a periodic reconcile, and on demand via **Admin → Sync now**. If Google rejects a sync the app keeps running and shows one clear error (e.g. "share the Sheet with the service account").
+
 ## Status
 
-Milestones **M0–M6** (skeleton, auth, core data, media, codes/print, scan PWA, movements & tags) and **M8** (hardening) are implemented and tested. **M7** (Google Sheet mirror) is deferred — the API endpoints exist but return `501` until a Google service account is configured (`SHEET_ID` + `GOOGLE_SERVICE_ACCOUNT_JSON`).
+Milestones **M0–M8** are implemented and tested, including **M7** (Google Sheet mirror, read-only).
