@@ -21,7 +21,11 @@ ENV DATA_DIR=/data
 ENV PORT=8080
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --omit=dev && npm cache clean --force
+# After installing prod deps, drop npm from the runtime image entirely: the app
+# runs with plain `node` (CMD + HEALTHCHECK), and npm's bundled node_modules
+# ship a vulnerable tar (CVE-2026-59873, tar 7.5.16 < 7.5.19) flagged by Trivy.
+RUN npm ci --omit=dev && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=build /app/dist ./dist
 
 # Data volume (SQLite db + media) owned by the unprivileged node user.
