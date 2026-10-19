@@ -53,12 +53,15 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
 - **sharp via HTTP** — JPEG with EXIF uploaded through `/api/media` is stored as an
   EXIF-free webp with a random name and served back; disguised non-image → 400.
 - **pdf-lib/qrcode** — label sheet is a valid A4 PDF, 24 labels/page, limits enforced.
-- **Production mode** — refuses to boot without secrets, `trustProxy` = 1 hop,
+- **Production mode** — refuses to boot without secrets, `trustProxy` = 1 hop
+  (and `TRUST_PROXY=<n>` really makes `req.ip` the client n hops back),
   `__Host-` cookie with HttpOnly/Secure/SameSite=Strict/no Domain, signed; CSP header.
 - **Sheet mirror unconfigured** — boots, status 200, export 501, stays healthy.
 
 `scripts/smoke.sh` (against the built image): read-only rootfs + `cap_drop ALL` +
-`no-new-privileges`, non-root, HEALTHCHECK healthy, SPA served, auth gate, first-run
+`no-new-privileges`, non-root, HEALTHCHECK healthy, SPA served (hashed bundle,
+`registerSW.js`, `sw.js` precache, manifest, deep-link fallback, no path
+traversal out of `dist/client`), auth gate, first-run
 setup → hardened cookie, login, DB file on `/data`, PDF, real PNG upload through
 sharp, non-image rejected, no error-level logs.
 
@@ -75,6 +78,15 @@ sharp, non-image rejected, no error-level logs.
 
 - **Node 24 → 26** (Dependabot #4): tests 97/97 and container smoke green on
   `node:26-slim` (26.12.0) on 2026-10-19 → **applied**: the Dockerfile is on `node:26-slim` (supersedes #4).
+- **npm deps, 2026-10-19** (Dependabot #10–#14, branch `agent/deps-oct2026`):
+  minor/patch group (fastify 5.8 → 5.12 …), `@fastify/static` 10, `vite-plugin-pwa` 2,
+  `typescript` 7, `vitest` 5 → tests 98/98 on node 24 + 26, smoke green.
+  fastify 5.12 stopped honouring a numeric `trustProxy` (it now trusts no hop):
+  `app.ts` maps `TRUST_PROXY=<n>` to the equivalent hop-count trust function, so
+  behaviour is unchanged. TS 7 emits identical `dist/server` JS; PWA 2 builds a
+  byte-identical `dist/client`. `npm audit` still lists transitive advisories
+  (`@fastify/busboy`, `fast-uri`, `find-my-way`, `qs`, dev-only tooling) that
+  `npm audit fix` resolves within existing ranges — left for a separate change.
 - Would catch: `node:sqlite` API/behaviour changes, argon2 binary or hash format
   changes, sharp prebuilt binary missing for the new base, pdf-lib output breakage,
   fastify/cookie attribute changes, ajv starting to strip instead of reject.
