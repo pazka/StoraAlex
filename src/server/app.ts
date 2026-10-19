@@ -40,10 +40,20 @@ function needsAuth(url: string): boolean {
   return p.startsWith('/api/') || p.startsWith('/media/');
 }
 
+/**
+ * Fastify >= 5.12 no longer accepts a hop count (a number now trusts nothing).
+ * TRUST_PROXY=<n> keeps its documented meaning — trust the n closest hops, as
+ * fastify did before — via the equivalent trust function.
+ */
+function fastifyTrustProxy(tp: Config['trustProxy']) {
+  if (typeof tp !== 'number') return tp;
+  return (_address: string, hop: number) => hop < tp;
+}
+
 export async function buildApp(config: Config, db: DB) {
   const app = Fastify({
     logger: config.env === 'test' ? false : { level: config.isProd ? 'info' : 'debug' },
-    trustProxy: config.trustProxy,
+    trustProxy: fastifyTrustProxy(config.trustProxy),
     routerOptions: { caseSensitive: true }, // pin the default the auth gate's path matching relies on
     bodyLimit: 1024 * 1024, // 1 MiB JSON; image bytes go through multipart instead
     // removeAdditional:false so additionalProperties:false on our schemas REJECTS
