@@ -52,7 +52,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "concurrently": "10.0.6",
     "tsx": "4.23.15",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vite": "8.3.4",
     "vite-plugin-pwa": "2.0.0",
     "vitest": "4.1.9"
