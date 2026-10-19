@@ -23,9 +23,10 @@ npm test                # vitest (test/*.test.ts); `npx vitest run test/api.test
 npm run typecheck       # tsc for server (tsconfig.server.json) and client (tsconfig.client.json)
 npm run seed            # create the first admin from SEED_ADMIN_* if no users exist
 npm audit               # run after any dependency change
+bash scripts/smoke.sh <image>  # container smoke against a built image (see TESTING.md)
 ```
 
-Environment: Windows 11, **PowerShell** (no WSL/Python/cargo). Node 24, npm 11. Docker is **not** installed locally (the image is built on the VPS). Prefix noisy commands with `rtk` to cut tokens.
+Environment: Windows 11, **PowerShell** (no WSL/Python/cargo). Node 24, npm 11. Docker Desktop is installed; run tests and the image smoke in containers per TESTING.md. Prefix noisy commands with `rtk` to cut tokens.
 
 ## Architecture
 

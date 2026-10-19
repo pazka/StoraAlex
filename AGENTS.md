@@ -28,3 +28,18 @@ Parameterized SQL only · Fastify JSON-Schema on every route · argon2id + peppe
 
 ## Definition of done per milestone
 Builds clean · tests pass · `npm audit` clean (or documented) · security criteria for touched areas met · Docker image still builds · README updated if behavior/deploy changed.
+
+## Maintenance (autonomous agent)
+Keeping dependencies, base image and Actions current **without changing behaviour**. Read [TESTING.md](./TESTING.md) first.
+
+- **Gate = `ci` workflow green**: `test (node 24)`, `test (node 26)`, `container smoke`. Nothing is ready without it.
+- **Branches**: work on `agent/<topic>`; pushing it runs CI without a PR. Never push to `main`, never tag (a `v*` tag releases to ghcr), never edit the push/tag logic of `deploy.yml`/`release.yml`.
+- **Merge policy: owner merges.** An agent prepares and reports; it does not merge unless the owner has said so for that class of PR.
+- **Dependabot PR triage**:
+  1. CI green → summarise the change (changelog highlights, risk) in a PR comment; done.
+  2. CI red → reproduce per TESTING.md on the PR's base, fix with the smallest change on an `agent/` branch (or the PR branch if asked). Re-run `npm audit`.
+  3. **Never weaken or delete a test to get green.** If behaviour must change, stop and ask the owner; record the decision in TESTING.md.
+  4. Base-image major merged → move the CI matrix to `[new, next]` and update TESTING.md "Upgrades checked".
+  5. Snapshot (`test/__snapshots__/`) changes only with a migration that explains it.
+- **Run tests in containers** (TESTING.md) — keeps package code off the owner's machine.
+- **Never** read/print `.env`, `data/`, DB files or exports; never add a dependency without the vetting above.
