@@ -23,6 +23,17 @@ jobs:
         with:
           script: |
             const run = context.payload.workflow_run;
+            // build-scan-push also runs the test suite and container smoke test
+            // (and on pull requests). Only a failed Trivy step means a CVE.
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner: context.repo.owner, repo: context.repo.repo, run_id: run.id,
+            });
+            const trivyFailed = jobs.some((j) =>
+              (j.steps ?? []).some((s) => /trivy/i.test(s.name) && s.conclusion === 'failure'));
+            if (!trivyFailed) {
+              core.info('Run failed outside the Trivy gate (tests / smoke) - no CVE issue opened.');
+              return;
+            }
             const title = 'Trivy CRITICAL gate failed — CVE remediation needed';
             const body = [
               `The security gate failed on \`${run.head_branch}\` @ \`${run.head_sha.slice(0,7)}\`.`,

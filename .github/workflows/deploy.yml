@@ -2,16 +2,73 @@ name: build-scan-push
 # Phase-2 CI (hosh.it): build -> Trivy gate (CRITICAL) -> push ghcr :ci + :sha.
 # Deliberately does NOT touch :latest — the box runs known-good mirrors. Promote a
 # validated build with: docker buildx imagetools create -t ghcr.io/pazka/storalex:latest ghcr.io/pazka/storalex:<sha>
+#
+# Safety net for dependency / base-image upgrades (see TESTING.md): `test` runs
+# the vitest suite on each Node major we ship or are about to ship, inside the
+# same node:<major>-slim image the Dockerfile uses; `smoke` runs the suite inside
+# the Dockerfile's own build stage, then builds the image and smoke-tests the
+# container with its real hardening flags. On pull requests only these two run;
+# on main, `build` (push to ghcr) waits for them.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
+    inputs:
+      tests_only:
+        description: 'Run only the test + smoke jobs (skip build/scan/push to ghcr)'
+        type: boolean
+        default: false
 permissions:
   contents: read
-  packages: write
 jobs:
-  build:
+  test:
+    name: test (node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    container: node:${{ matrix.node }}-slim
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24 = current Dockerfile base; 26 = the pending base-image bump.
+        node: ['24', '26']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --version && npm --version
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: npm test (boot test must not skip)
+        run: npm test
+        env:
+          REQUIRE_BUILD: '1'
+
+  smoke:
+    name: container smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: tests inside the Dockerfile build stage (follows its FROM line)
+        run: |
+          docker build --target build -t storalex:build .
+          docker run --rm -e REQUIRE_BUILD=1 \
+            -v "$PWD/test:/app/test:ro" -v "$PWD/vitest.config.ts:/app/vitest.config.ts:ro" \
+            storalex:build sh -c 'node --version && npx vitest run'
+      - name: build runtime image
+        run: docker build -t storalex:smoke .
+      - name: container smoke test
+        run: bash test/smoke/container-smoke.sh storalex:smoke
+
+  build:
+    needs: [test, smoke]
+    if: github.event_name != 'pull_request' && !inputs.tests_only
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
