@@ -106,7 +106,8 @@ async function waitHealthy(p: Proc, timeoutMs = 20000) {
 
 function scratchCwd(): string {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-boot-cwd-'));
-  fs.symlinkSync(path.join(ROOT, 'dist'), path.join(cwd, 'dist'), 'dir');
+  // 'junction' needs no admin rights on Windows; the type is ignored elsewhere.
+  fs.symlinkSync(path.join(ROOT, 'dist'), path.join(cwd, 'dist'), 'junction');
   return cwd;
 }
 
@@ -246,7 +247,9 @@ describe.skipIf(!built)('compiled app (dist/) in production mode', () => {
     expect(proc.err().split('\n').filter((l) => !benignStderr(l))).toEqual([]);
   });
 
-  it('shuts down cleanly on SIGTERM, then a restart on the same DATA_DIR keeps users and sessions', async () => {
+  // Windows has no SIGTERM delivery (kill() terminates), so the exit code is only
+  // meaningful on POSIX — which is what CI and the Docker image run.
+  it.skipIf(process.platform === 'win32')('shuts down cleanly on SIGTERM, then a restart on the same DATA_DIR keeps users and sessions', async () => {
     proc.child.kill('SIGTERM');
     expect(await proc.exited).toBe(0);
 
