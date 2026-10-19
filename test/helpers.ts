@@ -11,15 +11,20 @@ import { hashPassword } from '../src/server/auth/password.ts';
 export const TEST_USER = 'tester';
 export const TEST_PW = 'pw-12345678';
 
-export async function makeApp({ seed = true }: { seed?: boolean } = {}) {
+export const TEST_PEPPER = 'a'.repeat(32);
+export const TEST_SESSION_KEY = 'b'.repeat(32);
+
+/** Fresh in-memory app. `env` overrides/extends the fake test environment. */
+export async function makeApp({ seed = true, env = {} }: { seed?: boolean; env?: NodeJS.ProcessEnv } = {}) {
   const mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-test-'));
   const config = loadConfig({
     NODE_ENV: 'test',
-    APP_PEPPER: 'a'.repeat(32),
-    SESSION_KEY: 'b'.repeat(32),
+    APP_PEPPER: TEST_PEPPER,
+    SESSION_KEY: TEST_SESSION_KEY,
     DB_PATH: ':memory:',
     DATA_DIR: mediaDir,
     MEDIA_DIR: mediaDir,
+    ...env,
   });
   const db = openDb(config.dbPath);
   const repos = createRepos(db);
