@@ -74,7 +74,7 @@ sharp, non-image rejected, no error-level logs.
 ## Upgrades this suite has checked
 
 - **Node 24 → 26** (Dependabot #4): tests 97/97 and container smoke green on
-  `node:26-slim` (26.12.0) on 2026-10-19 → safe to merge once CI is green on the PR.
+  `node:26-slim` (26.12.0) on 2026-10-19 → **applied**: the Dockerfile is on `node:26-slim` (supersedes #4).
 - Would catch: `node:sqlite` API/behaviour changes, argon2 binary or hash format
   changes, sharp prebuilt binary missing for the new base, pdf-lib output breakage,
   fastify/cookie attribute changes, ajv starting to strip instead of reject.

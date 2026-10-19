@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build stage: compile TS + build the PWA ----
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 # .npmrc (ignore-scripts=true) is copied so the build install also runs with
 # lifecycle scripts disabled. Native deps (sharp, @node-rs/argon2) ship prebuilt
@@ -15,7 +15,7 @@ COPY src ./src
 RUN npm run build
 
 # ---- runtime stage: production deps only, non-root ----
-FROM node:24-slim AS runtime
+FROM node:26-slim AS runtime
 ENV NODE_ENV=production
 ENV DATA_DIR=/data
 ENV PORT=8080
