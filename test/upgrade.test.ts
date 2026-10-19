@@ -329,6 +329,36 @@ describe('production mode', () => {
     expect(loadConfig(prodEnv).trustProxy).toBe(1);
   });
 
+  it('a numeric TRUST_PROXY trusts exactly that many hops for req.ip / req.protocol', async () => {
+    // Per-IP rate limiting keys on req.ip: behind the single reverse proxy it must
+    // be the real client (right-most X-Forwarded-For), not the proxy and not the
+    // client-controlled left-most value.
+    for (const [hops, xff, expected] of [
+      ['1', '198.51.100.9, 203.0.113.7', '203.0.113.7'],
+      ['2', '198.51.100.9, 203.0.113.7', '198.51.100.9'],
+    ] as const) {
+      const config = loadConfig({ ...prodEnv, TRUST_PROXY: hops });
+      const db = openDb(config.dbPath);
+      const app = await buildApp(config, db);
+      app.log.level = 'silent';
+      app.get('/__whoami', async (req) => ({ ip: req.ip, ips: req.ips, protocol: req.protocol }));
+      await app.ready();
+      try {
+        const res = await app.inject({
+          method: 'GET',
+          url: '/__whoami',
+          remoteAddress: '10.0.0.2',
+          headers: { 'x-forwarded-for': xff, 'x-forwarded-proto': 'https' },
+        });
+        expect(res.json()).toMatchObject({ ip: expected, protocol: 'https' });
+        expect(res.json().ips[0]).toBe('10.0.0.2');
+      } finally {
+        await app.close();
+        db.close();
+      }
+    }
+  });
+
   it('sets a __Host- session cookie: httpOnly, Secure, SameSite=Strict, signed; CSP on', async () => {
     const mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-prod-'));
     const config = loadConfig({ ...prodEnv, DATA_DIR: mediaDir, MEDIA_DIR: mediaDir });
