@@ -54,7 +54,7 @@ npm start               # serves API + PWA together on :8080
 ### Other commands
 
 ```bash
-npm test                # vitest integration + unit tests
+npm test                # vitest suite (see TESTING.md; `npm run build` first to include the boot test)
 npm run typecheck       # tsc for server and client
 npm run seed            # create the first admin from SEED_ADMIN_* (if no users exist)
 npm audit               # run after any dependency change
