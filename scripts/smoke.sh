@@ -74,6 +74,26 @@ code 200 "$BASE/healthz"
 grep -q '"status":"ok"' "$TMP/body" || fail "/healthz body"
 code 200 "$BASE/"
 grep -q '<div id="root">' "$TMP/body" || fail "SPA index not served"
+asset="$( (grep -o 'src="/assets/[^"]*\.js"' "$TMP/body" || true) | head -1 | cut -d'"' -f2)"
+[ -n "$asset" ] || fail "index references no /assets/*.js bundle"
+grep -q 'registerSW.js' "$TMP/body" || fail "index does not load registerSW.js (PWA)"
+grep -q 'rel="manifest"' "$TMP/body" || fail "index has no web manifest link (PWA)"
+
+step "static files + SPA fallback (@fastify/static, vite-plugin-pwa)"
+ctype() { curl -sS -o "$TMP/body" -w '%{http_code} %{content_type}' "$1"; }
+case "$(ctype "$BASE$asset")" in "200 "*javascript*) ;; *) fail "bundle $asset not served as JS";; esac
+case "$(ctype "$BASE/registerSW.js")" in "200 "*javascript*) ;; *) fail "registerSW.js not served";; esac
+grep -q "serviceWorker" "$TMP/body" || fail "registerSW.js does not register a service worker"
+case "$(ctype "$BASE/sw.js")" in "200 "*javascript*) ;; *) fail "sw.js not served";; esac
+grep -q "precache" "$TMP/body" || fail "sw.js has no workbox precache"
+case "$(ctype "$BASE/manifest.webmanifest")" in "200 "*) ;; *) fail "manifest not served";; esac
+grep -q '"name":"StorAlex"' "$TMP/body" || fail "manifest content"
+case "$(ctype "$BASE/items/some/deep/link")" in "200 text/html"*) ;; *) fail "SPA deep link not served index.html";; esac
+grep -q '<div id="root">' "$TMP/body" || fail "SPA fallback body"
+got="$(curl -sS --path-as-is -o "$TMP/body" -w '%{http_code}' "$BASE/assets/../../package.json")"
+grep -q '"name"' "$TMP/body" && fail "path traversal out of dist/client ($got)"
+got="$(curl -sS -o "$TMP/body" -w '%{http_code}' "$BASE/%2e%2e/%2e%2e/package.json")"
+grep -q '"name"' "$TMP/body" && fail "encoded path traversal out of dist/client ($got)"
 code 200 "$BASE/api/setup-needed"
 grep -q '"needed":true' "$TMP/body" || fail "fresh DB should need setup"
 
