@@ -26,7 +26,7 @@
     "@fastify/rate-limit": "11.2.1",
     "@fastify/static": "10.1.7",
     "@fastify/type-provider-typebox": "6.3.0",
-    "@googleapis/sheets": "13.0.2",
+    "@googleapis/sheets": "18.1.1",
     "@node-rs/argon2": "2.2.2",
     "@sinclair/typebox": "0.34.52",
     "@tanstack/react-query": "5.104.5",
