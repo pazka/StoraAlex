@@ -1,21 +1,27 @@
+# Tested minor/patch updates merge themselves (workflows/dependabot-merge.yml, box standard
+# hosh-migration Decision #18); majors get "needs-review". 7-day cooldown (Decision #17).
 version: 2
 updates:
   - package-ecosystem: docker
     directory: "/"
-    schedule: { interval: monthly }
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
   # One grouped PR for all action bumps: separate PRs touching the same
   # workflow files conflict with each other once the first one is merged.
   - package-ecosystem: github-actions
     directory: "/"
-    schedule: { interval: monthly }
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
   # Minor/patch grouped into one PR; majors stay separate so each can be judged
   # on its own CI run (see TESTING.md, AGENTS.md "Maintenance").
   - package-ecosystem: npm
     directory: "/"
-    schedule: { interval: monthly }
+    schedule: { interval: weekly }
+    cooldown: { default-days: 7 }
     open-pull-requests-limit: 5
     groups:
       npm-minor-patch:
