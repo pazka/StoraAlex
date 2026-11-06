@@ -34,11 +34,11 @@ Runs on every pull request, on `main`, and on `agent/**` branches.
 | job | what |
 |---|---|
 | `test (node 26)` | `npm ci`, typecheck, vitest, build — inside `node:26-slim`, same family as the Dockerfile |
-| `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh`, then `scripts/compose-smoke.sh legacy` |
+| `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh`, `scripts/compose-smoke.sh legacy`, `scripts/register-check.sh` (+ a rejected non-read-only compose), `compose-smoke.sh template` and `cutover` |
 
 `scripts/check-node-version.sh <image>` fails if the image's Node is EOL or below the
 patched minimum of its line (CVE-2026-111497, pazka/hosh-management#5). It also runs in
-`release.yml` and `deploy.yml` (build-scan-push) before any push. Node 20 is EOL and only
+`release.yml` and `build-scan-push.yml` before any push. Node 20 is EOL and only
 LTS lines are allowed; when the Dockerfile moves to a new LTS major, move the matrix with it.
 
 ## What is covered
@@ -77,6 +77,18 @@ Sheet mirror finds and parses its credentials (fake key: signing fails locally, 
 sent to Google), then `compose down` + `up` and the same password, item, location and photo
 bytes come back, new writes work, no error-level logs.
 
+`scripts/compose-smoke.sh template <image>`: `docker-compose.example.yml` as hosh-deploy runs
+it (`storalex.env` from `.env.example`, uid 10001, read-only rootfs, PORT 8000 on
+`127.0.0.1:9138`, service account as `GOOGLE_SERVICE_ACCOUNT_JSON_B64`): same checks, plus
+the box's `register` validation, `/healthz` capability fields, rootfs not writable, and
+`POST_DEPLOY` from `deploy/hosh-deploy.conf` run like hosh-deploy (`compose exec`, argv).
+
+`scripts/compose-smoke.sh cutover <image>`: DEPLOY.md §1b end to end, its two marked shell
+blocks executed verbatim: secrets moved from the legacy container (names printed, values
+not), legacy stopped, volume copied and chowned to 10001 (sha256 identical file by file),
+a second copy refused, template up on the copy (same login, item, photo bytes), then
+rollback: legacy up again on its untouched volume.
+
 ## Deliberately not covered
 
 - The React PWA in a browser (no browser test runner; adding one needs a new
@@ -108,5 +120,5 @@ bytes come back, new writes work, no error-level logs.
 
 ## Known quirks (not changed)
 
-- `.github/workflows/deploy.yml` contained a CP-1252 byte (invalid UTF-8); it was
+- `.github/workflows/deploy.yml` (now `build-scan-push.yml`) contained a CP-1252 byte (invalid UTF-8); it was
   replaced by an ASCII hyphen so Dependabot can parse and bump it again.

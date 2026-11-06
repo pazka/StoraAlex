@@ -18,7 +18,13 @@ name: release
 #   secrets.DOKPLOY_WEBHOOK  Dokploy deploy-webhook URL, POSTed after :latest is pushed.
 #                         Unset/empty = a notice is printed and the run still succeeds.
 #
-# The build-scan-push workflow (deploy.yml) is untouched: it keeps pushing :ci + :<sha> only.
+#   then (hosh-deploy, DEPLOY.md) -> job `deploy`: final tags vX.Y.Z only (never prereleases or
+#                                           branch builds) -> deploy.yml -> `hosh-deploy deploy storalex vX.Y.Z`
+#                                           on the box. No HOSH_DEPLOY_KEY secret = a notice, nothing
+#                                           deployed (images are still pushed for the legacy compose).
+#   vars.HOSH_AUTODEPLOY  'false' = no deploy after a release (Actions -> deploy still works by hand).
+#
+# The build-scan-push workflow (build-scan-push.yml) is untouched: it keeps pushing :ci + :<sha> only.
 on:
   push:
     tags: ['v*']
@@ -34,6 +40,9 @@ env:
   IMAGE: ghcr.io/pazka/storalex
 jobs:
   release:
+    outputs:
+      tag: ${{ steps.meta.outputs.primary }}
+      deployable: ${{ steps.meta.outputs.deployable }}
     # Tag pushes and manual runs always go; branch pushes only when DEPLOY_TRIGGER == 'main'.
     if: github.event_name != 'push' || github.ref_type == 'tag' || vars.DEPLOY_TRIGGER == 'main'
     runs-on: ubuntu-latest
@@ -61,6 +70,11 @@ jobs:
             primary="main-${SHA:0:7}"
             latest=true
           fi
+          deployable=false   # hosh-deploy accepts final release tags only
+          if [ "$REF_TYPE" = "tag" ] && printf '%s' "$REF_NAME" | grep -Eq '^v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}$'; then
+            deployable=true
+          fi
+          echo "deployable=$deployable" >> "$GITHUB_OUTPUT"
           echo "primary=$primary" >> "$GITHUB_OUTPUT"
           echo "latest=$latest" >> "$GITHUB_OUTPUT"
           echo "release tags: :$primary :$SHA (latest=$latest)"
@@ -112,3 +126,13 @@ jobs:
             exit 0
           fi
           curl -fsS -X POST "$DOKPLOY_WEBHOOK"
+
+  # Box standard (Decision #16): a final release goes live through hosh-deploy on the hosh.it box,
+  # which verifies it and rolls back by itself. No-op (notice) while HOSH_DEPLOY_KEY is unset.
+  deploy:
+    needs: release
+    if: needs.release.outputs.deployable == 'true' && vars.HOSH_AUTODEPLOY != 'false'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      version: ${{ needs.release.outputs.tag }}
+    secrets: inherit

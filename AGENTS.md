@@ -33,7 +33,7 @@ Builds clean · tests pass · `npm audit` clean (or documented) · security crit
 Keeping dependencies, base image and Actions current **without changing behaviour**. Read [TESTING.md](./TESTING.md) first.
 
 - **Gate = `ci` workflow green**: `test (node 26)`, `container smoke` (incl. the Node version guardrail). Nothing is ready without it.
-- **Branches**: work on `agent/<topic>`; pushing it runs CI without a PR. Never push to `main`, never tag (a `v*` tag releases to ghcr), never edit the push/tag logic of `deploy.yml`/`release.yml`.
+- **Branches**: work on `agent/<topic>`; pushing it runs CI without a PR. Never push to `main`, never tag (a `v*` tag releases to ghcr), never edit the push/tag logic of `build-scan-push.yml`/`release.yml` (the `deploy` job + `deploy.yml` = hosh-deploy, DEPLOY.md).
 - **Merge policy: owner merges.** An agent prepares and reports; it does not merge unless the owner has said so for that class of PR.
 - **Dependabot PR triage**:
   1. CI green → summarise the change (changelog highlights, risk) in a PR comment; done.

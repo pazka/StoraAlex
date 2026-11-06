@@ -40,6 +40,16 @@ function needsAuth(url: string): boolean {
   return p.startsWith('/api/') || p.startsWith('/media/');
 }
 
+function writableDir(dir: string): boolean {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return false;
+    fs.accessSync(dir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fastify >= 5.12 no longer accepts a hop count (a number now trusts nothing).
  * TRUST_PROXY=<n> keeps its documented meaning — trust the n closest hops, as
@@ -125,9 +135,26 @@ export async function buildApp(config: Config, db: DB) {
     app.sheetMirror.scheduleSync();
   });
 
-  app.get('/healthz', async () => {
-    db.prepare('SELECT 1').get();
-    return { status: 'ok' };
+  // Capability health (box standard): the DB answers and the storage the app
+  // writes to (DB directory, media directory) is a writable directory. Used by
+  // the image HEALTHCHECK and by hosh-deploy before a release goes live.
+  // Never exposes paths, counts of user data or secrets.
+  app.get('/healthz', async (_req, reply) => {
+    let migrations: number;
+    try {
+      migrations = (db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }).n;
+    } catch {
+      return reply.code(503).send({ status: 'error', db: 'error' });
+    }
+    const dirs = [
+      config.dbPath === ':memory:' ? null : path.dirname(config.dbPath),
+      // created on the first upload: until then its parent must be writable
+      fs.existsSync(config.mediaDir) ? config.mediaDir : path.dirname(config.mediaDir),
+    ];
+    for (const dir of dirs) {
+      if (dir && !writableDir(dir)) return reply.code(503).send({ status: 'error', db: 'ok', storage: 'not writable' });
+    }
+    return { status: 'ok', db: 'ok', migrations, storage: 'writable' };
   });
 
   await app.register(authRoutes);
