@@ -9,15 +9,16 @@ on a green CI run alone.
 Everything runs in containers — nothing from `node_modules` executes on the host.
 
 ```bash
-# unit + characterization tests on a given Node major (24 = current, 26 = next)
-docker run --rm -v "$PWD":/app -v storalex_nm24:/app/node_modules -w /app node:24-slim \
+# unit + characterization tests on the Dockerfile's Node major (26)
+docker run --rm -v "$PWD":/app -v storalex_nm26:/app/node_modules -w /app node:26-slim \
   sh -c "npm ci && npm run typecheck && npm test"
 
 # container smoke: build the real image, run it hardened, hit real endpoints
-docker build -t storalex:smoke . && bash scripts/smoke.sh storalex:smoke
+docker build -t storalex:smoke . && bash scripts/check-node-version.sh storalex:smoke \
+  && bash scripts/smoke.sh storalex:smoke
 
-# try the next base image before Dependabot's PR lands
-sed 's/node:24-slim/node:26-slim/g' Dockerfile | docker build -f - -t storalex:next . \
+# try another base image before Dependabot's PR lands (edit the FROM tag+digest)
+sed 's|^FROM node:[^ ]*|FROM node:<new-tag>|' Dockerfile | docker build -f - -t storalex:next . \
   && bash scripts/smoke.sh storalex:next
 ```
 
@@ -32,11 +33,13 @@ Runs on every pull request, on `main`, and on `agent/**` branches.
 
 | job | what |
 |---|---|
-| `test (node 24)` / `test (node 26)` | `npm ci`, typecheck, vitest, build — inside `node:<n>-slim`, same family as the Dockerfile |
-| `container smoke` | builds the Dockerfile, runs `scripts/smoke.sh` |
+| `test (node 26)` | `npm ci`, typecheck, vitest, build — inside `node:26-slim`, same family as the Dockerfile |
+| `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh` |
 
-When the Dockerfile moves to a new Node major, move the matrix up with it
-(current + next).
+`scripts/check-node-version.sh <image>` fails if the image's Node is EOL or below the
+patched minimum of its line (CVE-2026-111497, pazka/hosh-management#5). It also runs in
+`release.yml` and `deploy.yml` (build-scan-push) before any push. Node 20 is EOL and only
+LTS lines are allowed; when the Dockerfile moves to a new LTS major, move the matrix with it.
 
 ## What is covered
 
@@ -78,6 +81,9 @@ sharp, non-image rejected, no error-level logs.
 
 - **Node 24 → 26** (Dependabot #4): tests 97/97 and container smoke green on
   `node:26-slim` (26.12.0) on 2026-10-19 → **applied**: the Dockerfile is on `node:26-slim` (supersedes #4).
+- **Node 26.13.0, pinned by digest** (2026-11-06, pazka/hosh-management#5, CVE-2026-111497
+  fixed in 26.12.1): Dockerfile `FROM node:26.13.0-slim@sha256:5adad64f…`, CI matrix 26 only
+  (Node 24 dropped), Node version guardrail added to CI + release + build-scan-push.
 - **npm deps, 2026-10-19** (Dependabot #10–#14, branch `agent/deps-oct2026`):
   minor/patch group (fastify 5.8 → 5.12 …), `@fastify/static` 10, `vite-plugin-pwa` 2,
   `typescript` 7, `vitest` 5 → tests 98/98 on node 24 + 26, smoke green.
