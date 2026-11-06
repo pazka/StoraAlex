@@ -58,3 +58,17 @@ jobs:
       # 127.0.0.1:8090, .env, volume, Google SA bind mount. Data must survive a re-creation.
       - name: Legacy compose (box today) - full capability + data kept across re-creation
         run: bash scripts/compose-smoke.sh legacy storalex:smoke
+      # hosh-deploy (DEPLOY.md): what `register` validates on the box, and a test of that check.
+      - name: Box register validation (hosh-deploy register, simulated)
+        run: |
+          bash scripts/register-check.sh
+          t="$(mktemp -d)" && cp -r deploy .env.example "$t"/ && sed '/read_only: true/d' docker-compose.example.yml > "$t/docker-compose.example.yml"
+          if bash scripts/register-check.sh "$t"; then echo "::error::register-check accepted a writable rootfs"; exit 1; fi
+          echo "register-check correctly rejected a compose without read_only"
+      # docker-compose.example.yml as hosh-deploy runs it: uid 10001, read-only, PORT=8000 on
+      # 127.0.0.1:9138, service account as base64 env, POST_DEPLOY via compose exec.
+      - name: Template compose (hosh-deploy) - full capability + POST_DEPLOY + data kept
+        run: bash scripts/compose-smoke.sh template storalex:smoke
+      # DEPLOY.md "Cutover from legacy", its shell blocks run verbatim: same DB/photos/passwords.
+      - name: Cutover legacy -> hosh-deploy (DEPLOY.md 1b) + rollback
+        run: bash scripts/compose-smoke.sh cutover storalex:smoke

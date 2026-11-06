@@ -1,0 +1,47 @@
+# storalex on the hosh.it box (no secrets here). On the box it becomes /srv/storalex/docker-compose.yml,
+# validated and pinned by `hosh-deploy register` (any later change needs a re-register).
+# Every site-specific value comes from storalex.env (interpolation AND container env).
+# Box standard (hosh-migration 11-BOX-STANDARD.md): published on a LOOPBACK port only; the edge
+# Traefik (host network, file provider) routes storalex.hosh.it to it (route rendered by hosh-deploy
+# from deploy/traefik-route.yml.tmpl).
+# hosh-deploy refuses: root user, writable rootfs, missing cap_drop ALL / no-new-privileges /
+# healthcheck, privileged, host network/pid/ipc, devices, bind mounts, non-loopback ports.
+# (docker-compose.yml next to this file is the local/legacy example: port 8080, image user.)
+name: storalex            # fixed compose project name (whatever the checkout dir)
+services:
+  storalex:
+    image: ${APP_IMAGE:-ghcr.io/pazka/storalex:latest}
+    container_name: storalex
+    restart: unless-stopped
+    env_file: ./storalex.env          # chmod 600
+    environment:                      # structural, not site config: fixed here, not in the env file
+      PORT: "8000"
+      DATA_DIR: /data
+    volumes:
+      - storalex-data:/data           # SQLite storalex.db (WAL) + media/ — ALL state (monthly restic golden)
+    # --- hardening (box standard) ---
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    user: "10001:10001"
+    pids_limit: 128
+    mem_limit: 512m
+    healthcheck:
+      # no curl in the image: node itself checks GET /healthz (DB answers + storage writable)
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    ports:
+      - "${APP_BIND:-127.0.0.1:9138}:8000"   # loopback only — never 0.0.0.0
+
+volumes:
+  storalex-data:
+    name: storalex-data       # exact docker volume name

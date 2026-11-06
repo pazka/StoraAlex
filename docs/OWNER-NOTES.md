@@ -131,3 +131,17 @@ I ran an 8-dimension adversarial security review (auth/session, SQL injection, i
 - Create a **production** `.env` on the VPS: `NODE_ENV=production`, strong `APP_PEPPER` + `SESSION_KEY` (`openssl rand -hex 32`), and `SEED_ADMIN_*`.
 - `docker compose up -d --build`, then point your TLS reverse proxy at `127.0.0.1:8080`.
 - (Docker isn't installed on this Windows machine, so I couldn't build the image here — but every step inside the Dockerfile was verified individually: `npm ci`, `npm run build`, and `node dist/server/index.js` all run clean.)
+
+## hosh-deploy migration (2026-11-06, pazka/hosh-management#5)
+
+- StorAlex becomes a hosh-deploy "template app": `deploy/hosh-deploy.conf` (storalex.hosh.it,
+  `127.0.0.1:9138`), `docker-compose.example.yml`, `.env.example` (`# required: APP_PEPPER SESSION_KEY`),
+  `release.yml` → `deploy` job (no-op until the `HOSH_DEPLOY_KEY` secret exists). See **DEPLOY.md**.
+- The image still runs unchanged under the legacy compose (uid 1000, port 8080, bind-mounted
+  service-account file) until the cutover; CI tests both, plus the cutover itself.
+- New: `GOOGLE_SERVICE_ACCOUNT_JSON_B64` (service-account key as base64 env; hosh-deploy allows no
+  file mounts). `/healthz` now proves capability (`db`, `migrations`, `storage`) and answers 503 when
+  the DB or `/data` is unusable. `/data` in the image is `node:10001` mode 0770.
+- You'll need to: make the GHCR package `storalex` public, cut a release (≥ v1.2.0), and run step C
+  of DEPLOY.md §1b (moves APP_PEPPER/SESSION_KEY/Sheet config from the legacy container) — or let the
+  on-box Claude do it with your yes. **Never regenerate APP_PEPPER**: it would lock every user out.

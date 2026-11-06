@@ -61,6 +61,27 @@ function parseTrustProxy(v: string | undefined, isProd: boolean): boolean | numb
 }
 
 /**
+ * GOOGLE_SERVICE_ACCOUNT_JSON_B64: the service-account JSON, base64-encoded, for
+ * deployments that allow no file mounts (hosh-deploy: env file only). Base64 has
+ * no quotes, `$` or newlines, so it survives env-file parsing and compose
+ * interpolation unchanged. GOOGLE_SERVICE_ACCOUNT_JSON (path or inline JSON) wins
+ * when both are set. Invalid content leaves the mirror unconfigured (never logged).
+ */
+function serviceAccountFromBase64(v: string | undefined): string | null {
+  const t = v?.trim();
+  if (!t) return null;
+  try {
+    const json = Buffer.from(t, 'base64').toString('utf8').trim();
+    const parsed: unknown = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return json;
+  } catch {
+    /* fall through */
+  }
+  console.warn('[config] GOOGLE_SERVICE_ACCOUNT_JSON_B64 is not base64 of a JSON object: Sheet mirror left unconfigured.');
+  return null;
+}
+
+/**
  * Build the runtime config from the environment.
  * In production the security-critical secrets are required and the process
  * refuses to start without them. In dev/test we fall back to ephemeral values.
@@ -116,7 +137,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     seedAdminUser: env.SEED_ADMIN_USER || null,
     seedAdminPassword: env.SEED_ADMIN_PASSWORD || null,
     sheetId: env.SHEET_ID || null,
-    googleServiceAccountJson: env.GOOGLE_SERVICE_ACCOUNT_JSON || null,
+    googleServiceAccountJson:
+      env.GOOGLE_SERVICE_ACCOUNT_JSON || serviceAccountFromBase64(env.GOOGLE_SERVICE_ACCOUNT_JSON_B64),
     sheetSyncDebounceMs: int(env.SHEET_SYNC_DEBOUNCE_MS, 10000),
     maxUploadBytes: int(env.MAX_UPLOAD_BYTES, 15 * 1024 * 1024),
   };

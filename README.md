@@ -64,6 +64,10 @@ npm audit               # run after any dependency change
 
 ## Deploy with Docker (VPS)
 
+> **hosh.it box:** StorAlex is deployed by `hosh-deploy` from GitHub releases — see
+> **[DEPLOY.md](./DEPLOY.md)** (`docker-compose.example.yml`, `deploy/`, cutover from the legacy
+> compose). The generic steps below still describe the plain-compose setup (`docker-compose.yml`).
+
 The image is a multi-stage build that compiles everything and runs as a non-root user. State lives in the `/data` volume (`storalex.db` + `media/`).
 
 1. On the VPS, create a **production** `.env` next to `docker-compose.yml`:

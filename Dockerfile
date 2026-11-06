@@ -31,8 +31,12 @@ RUN npm ci --omit=dev && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=build /app/dist ./dist
 
-# Data volume (SQLite db + media) owned by the unprivileged node user.
-RUN mkdir -p /data && chown -R node:node /data
+# Data volume (SQLite db + media). Two ways to run this image:
+#  - legacy box compose: image user `node` (uid 1000), owner of /data;
+#  - hosh-deploy (docker-compose.example.yml): `user: "10001:10001"`, read-only rootfs.
+# A fresh named volume copies this directory's owner and mode, so group 10001
+# gets write access too (0770: nobody else). PORT and DATA_DIR come from env.
+RUN mkdir -p /data && chown node:10001 /data && chmod 0770 /data
 USER node
 VOLUME ["/data"]
 EXPOSE 8080

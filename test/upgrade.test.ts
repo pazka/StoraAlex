@@ -85,7 +85,12 @@ describe('auth gate covers every /api and /media route', () => {
   });
 
   it('public routes stay public', async () => {
-    expect((await app.inject({ method: 'GET', url: '/healthz' })).json()).toEqual({ status: 'ok' });
+    expect((await app.inject({ method: 'GET', url: '/healthz' })).json()).toEqual({
+      status: 'ok',
+      db: 'ok',
+      migrations: fs.readdirSync(path.join(import.meta.dirname, '../src/server/db/migrations')).filter((f) => f.endsWith('.sql')).length,
+      storage: 'writable',
+    });
     expect((await app.inject({ method: 'GET', url: '/api/setup-needed' })).json()).toEqual({ needed: false });
     expect((await app.inject({ method: 'POST', url: '/api/auth/logout' })).json()).toEqual({ ok: true });
     const bad = await app.inject({
@@ -402,6 +407,45 @@ describe('Google Sheet mirror unconfigured', () => {
       const exp = await app.inject({ method: 'POST', url: '/api/sheet/export', headers: { cookie } });
       expect(exp.statusCode).toBe(501);
       expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('/healthz proves capability (hosh-deploy health gate)', () => {
+  it('503 when the media storage is not a writable directory', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-health-'));
+    const notADir = path.join(dir, 'file');
+    fs.writeFileSync(notADir, 'x');
+    const config = loadConfig({
+      NODE_ENV: 'test',
+      APP_PEPPER: 'a'.repeat(32),
+      SESSION_KEY: 'b'.repeat(32),
+      DB_PATH: ':memory:',
+      DATA_DIR: dir,
+      MEDIA_DIR: path.join(notADir, 'media'), // parent is a file: even root cannot write there
+    });
+    const db = openDb(config.dbPath);
+    const app = await buildApp(config, db);
+    try {
+      const res = await app.inject({ method: 'GET', url: '/healthz' });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ status: 'error', db: 'ok', storage: 'not writable' });
+      expect(res.body).not.toContain(dir); // no path leaked
+    } finally {
+      await app.close();
+      db.close();
+    }
+  });
+
+  it('503 when the database is unusable', async () => {
+    const { app, db } = await makeApp({ seed: false });
+    try {
+      db.close();
+      const res = await app.inject({ method: 'GET', url: '/healthz' });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toEqual({ status: 'error', db: 'error' });
     } finally {
       await app.close();
     }
