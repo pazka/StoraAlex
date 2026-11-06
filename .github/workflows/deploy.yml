@@ -25,6 +25,8 @@ jobs:
           context: .
           load: true
           tags: ghcr.io/pazka/storalex:candidate
+      - name: Node version guardrail (CVE-2026-111497) - nothing is pushed if this fails
+        run: bash scripts/check-node-version.sh ghcr.io/pazka/storalex:candidate
       - name: Trivy gate (fail on CRITICAL)
         uses: aquasecurity/trivy-action@v0.36.0
         with:

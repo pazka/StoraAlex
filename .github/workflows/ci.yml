@@ -1,7 +1,8 @@
 name: ci
 # Upgrade safety net (see TESTING.md): unit/characterization tests on the
-# current AND next Node major, then build the real image and smoke it with its
-# production hardening flags. Runs on every PR (incl. Dependabot), on main, and
+# Node major the Dockerfile uses (26 LTS; Node 20 is EOL, 24 dropped with
+# pazka/hosh-management#5), then build the real image, check its Node version
+# (scripts/check-node-version.sh) and smoke it with its production hardening flags. Runs on every PR (incl. Dependabot), on main, and
 # on agent/** branches so an agent gets CI without opening a PR.
 on:
   pull_request:
@@ -22,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['24', '26']
+        node: ['26']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: npm ci --no-audit --no-fund
@@ -43,4 +44,13 @@ jobs:
           load: true
           push: false
           tags: storalex:smoke
+      - name: Node version guardrail (CVE-2026-111497, pazka/hosh-management#5)
+        run: bash scripts/check-node-version.sh storalex:smoke
+      - name: Guardrail rejects an unpatched Node (test of the test)
+        run: |
+          if bash scripts/check-node-version.sh node:24.21.0-slim; then
+            echo "::error::check-node-version.sh accepted node:24.21.0-slim (unpatched, < 24.22.1)"
+            exit 1
+          fi
+          echo "guardrail correctly rejected node:24.21.0-slim"
       - run: bash scripts/smoke.sh storalex:smoke
