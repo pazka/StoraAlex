@@ -34,7 +34,7 @@ Runs on every pull request, on `main`, and on `agent/**` branches.
 | job | what |
 |---|---|
 | `test (node 26)` | `npm ci`, typecheck, vitest, build — inside `node:26-slim`, same family as the Dockerfile |
-| `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh` |
+| `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh`, then `scripts/compose-smoke.sh legacy` |
 
 `scripts/check-node-version.sh <image>` fails if the image's Node is EOL or below the
 patched minimum of its line (CVE-2026-111497, pazka/hosh-management#5). It also runs in
@@ -67,6 +67,15 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
 traversal out of `dist/client`), auth gate, first-run
 setup → hardened cookie, login, DB file on `/data`, PDF, real PNG upload through
 sharp, non-image rejected, no error-level logs.
+
+`scripts/compose-smoke.sh legacy <image>`: the box's hand-made compose today
+(`/root/hosh-deploy/storalex`), verbatim except the image: image user (uid 1000), port 8080
+on `127.0.0.1:8090`, `.env`, named volume `storalex_storalex-data`, Google service-account
+JSON bind-mounted read-only at `/run/secrets/google-sa.json`. Proves: HEALTHCHECK healthy,
+`/healthz`, SPA, auth gate, first-run setup, place + item + photo written, label PDF, the
+Sheet mirror finds and parses its credentials (fake key: signing fails locally, nothing is
+sent to Google), then `compose down` + `up` and the same password, item, location and photo
+bytes come back, new writes work, no error-level logs.
 
 ## Deliberately not covered
 

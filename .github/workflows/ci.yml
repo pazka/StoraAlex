@@ -54,3 +54,7 @@ jobs:
           fi
           echo "guardrail correctly rejected node:24.21.0-slim"
       - run: bash scripts/smoke.sh storalex:smoke
+      # The box's legacy compose (until the hosh-deploy cutover), verbatim: uid 1000, :8080 on
+      # 127.0.0.1:8090, .env, volume, Google SA bind mount. Data must survive a re-creation.
+      - name: Legacy compose (box today) - full capability + data kept across re-creation
+        run: bash scripts/compose-smoke.sh legacy storalex:smoke
