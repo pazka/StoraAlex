@@ -49,7 +49,7 @@ jobs:
       - name: Guardrail rejects an unpatched Node (test of the test)
         run: |
           if bash scripts/check-node-version.sh node:24.21.0-slim; then
-            echo "::error::check-node-version.sh accepted node:24.21.0-slim (unpatched, < 24.22.1)"
+            echo "::error::check-node-version.sh accepted node:24.21.0-slim (unpatched, < 24.22.3)"
             exit 1
           fi
           echo "guardrail correctly rejected node:24.21.0-slim"

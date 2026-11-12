@@ -4,7 +4,7 @@
 # Base pinned by exact Node version + digest (pazka/hosh-management#5, CVE-2026-111497);
 # Dependabot (docker ecosystem) bumps tag and digest together. CI and release.yml run
 # scripts/check-node-version.sh on the built image before anything is pushed.
-FROM node:26.13.0-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS build
+FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS build
 WORKDIR /app
 # .npmrc (ignore-scripts=true) is copied so the build install also runs with
 # lifecycle scripts disabled. Native deps (sharp, @node-rs/argon2) ship prebuilt
@@ -18,7 +18,7 @@ COPY src ./src
 RUN npm run build
 
 # ---- runtime stage: production deps only, non-root ----
-FROM node:26.13.0-slim@sha256:5adad64f9a1fca2d51972caa65983634c8a774eb300d72b20f7f2a0f60368072 AS runtime
+FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS runtime
 ENV NODE_ENV=production
 ENV DATA_DIR=/data
 ENV PORT=8080
