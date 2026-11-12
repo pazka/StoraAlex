@@ -206,7 +206,7 @@ label PDF, restart, same data) in `scripts/compose-smoke.sh template` and `cutov
 ## 4. What runs
 | Item | Value |
 |---|---|
-| Image | `ghcr.io/pazka/storalex:vX.Y.Z` (`node:26.13.0-slim` pinned by digest; uid 10001 via compose) |
+| Image | `ghcr.io/pazka/storalex:vX.Y.Z` (`node:26.13.1-slim` pinned by digest; uid 10001 via compose) |
 | Upstream | container :8000 → `127.0.0.1:9138` |
 | Edge | `/root/hosh-deploy/edge/traefik/dynamic/storalex.yml` (router `storalex@file`, resolver `le`, HSTS) |
 | Volume | `storalex-data` → `/data` (monthly restic golden via `/var/lib/docker/volumes`) |
