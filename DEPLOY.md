@@ -23,6 +23,8 @@ The box pulls the image, swaps the tag in `storalex.env`, waits healthy, checks 
 rootfs, `/healthz` on the loopback port and through Traefik, runs `POST_DEPLOY` inside the container
 (`deploy/hosh-deploy.conf`) and **rolls back by itself** if any check fails (the workflow goes red).
 
+- Release: push the tag `vX.Y.Z`, or Actions → **release** on `main` with `version=vX.Y.Z` (creates the
+  tag and the GitHub release on the commit it built and scanned; fails if the tag exists on another commit).
 - Prerelease tags (`vX.Y.Z-rc.N`) build and push `:vX.Y.Z-rc.N` only: never `:latest`, never deployed.
 - Until `HOSH_DEPLOY_KEY` exists, the `deploy` job prints a notice and deploys nothing, so releases
   keep working for the legacy compose (it pins `ghcr.io/pazka/storalex:vX.Y.Z` by hand).
