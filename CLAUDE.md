@@ -41,7 +41,7 @@ Single Node process (`src/server/index.ts`) serves the JSON API, the built PWA, 
   - `auth/` — argon2id+pepper (`password.ts`), session token hashing (`session.ts`).
   - `routes/` — one plugin per area (auth incl. first-run `/api/auth/setup`, users, items, places, codes, tags, movements, media, sheet); `FastifyPluginAsyncTypebox`.
   - `schemas.ts` — TypeBox request schemas (`additionalProperties:false` → unknown fields are rejected).
-  - `lib/` — `images.ts` (sharp re-encode/EXIF-strip), `pdf.ts` (QR label sheet), `sheet.ts` (M7 stub).
+  - `lib/` — `images.ts` (sharp re-encode/EXIF-strip), `pdf.ts` (QR label sheet), `sheet.ts` (M7 read-only Google Sheet mirror; off unless `SHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON` or `_B64` are set).
 - **`src/client/`** — React + Vite PWA. `lib/api.ts` (fetch wrapper), `lib/auth.tsx` (session context), `lib/queries.ts` (TanStack Query hooks), `components/` (Layout, Scanner, PlacePicker, ui), `pages/` (Scan/Items/Places/Tags/Labels/…). Routing via react-router; QR scan via `@zxing/browser` with a manual-entry fallback.
 - **`src/shared/`** — types and code-ID helpers (`ids.ts`) used by both sides.
 
