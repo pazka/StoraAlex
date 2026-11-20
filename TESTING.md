@@ -57,6 +57,18 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
 - **sharp via HTTP** — JPEG with EXIF uploaded through `/api/media` is stored as an
   EXIF-free webp with a random name and served back; disguised non-image → 400.
 - **pdf-lib/qrcode** — label sheet is a valid A4 PDF, 24 labels/page, limits enforced.
+- **Logging standard** (hosh-management AGENTS.md §11, `test/logging.test.ts`, code in
+  `src/server/lib/log.ts`) — one JSON line per event on stdout (`ts`, `level`, `service`,
+  `version`, `event`, `msg`); a real server process prints `startup` (version, port, data dir
+  writable, config names without values) and `shutdown` on SIGTERM, nothing on stderr; a 5xx is
+  one `request_failed` error line with the route template and `err` (type, message, stack),
+  never the raw path or query; a refused login is one `auth_refused` warn line without the
+  username or password; other answers and `/healthz` stay at debug; a request slower than 1 s is
+  a `request_slow` warn; `X-Request-Id` is echoed (plain token, at most 64 chars) or generated on
+  every answer, the auth gate's 401 included; e-mail addresses never reach `err`. Fastify's own
+  logger is off (it wrote every request with its raw URL and the client IP). `LOG_LEVEL`
+  (or `APP_LOG_LEVEL`), default `info`. The smokes and the visual harness fail on any
+  `"level":"error"` line (and still on pino's 50/60).
 - **Production mode** — refuses to boot without secrets, `trustProxy` = 1 hop
   (and `TRUST_PROXY=<n>` really makes `req.ip` the client n hops back),
   `__Host-` cookie with HttpOnly/Secure/SameSite=Strict/no Domain, signed; CSP header.

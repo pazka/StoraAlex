@@ -95,10 +95,10 @@ rc=$?
 set -e
 # logs to a file first: under pipefail a pipe into grep -q can lose the match (SIGPIPE) and hide an error
 dk logs "$NAME" >"$LOGS/app.log" 2>&1 || true
-# pino levels: 50 = error, 60 = fatal
-if grep -qE '"level":(50|60)' "$LOGS/app.log"; then
+# "error" (logging standard); 50, 60 = pino error, fatal (kept: any pino line still counts)
+if grep -qE '"level":(50|60|"error")' "$LOGS/app.log"; then
   echo "VISUAL FAIL: the app logged an error" >&2
-  grep -E '"level":(50|60)' "$LOGS/app.log" | head -20 >&2
+  grep -E '"level":(50|60|"error")' "$LOGS/app.log" | head -20 >&2
   rc=1
 fi
 cp "$LOGS/app.log" "$OUT/server.log" 2>/dev/null || true

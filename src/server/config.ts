@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { log } from './lib/log.js';
 
 export interface Config {
   env: 'development' | 'production' | 'test';
@@ -77,7 +78,9 @@ function serviceAccountFromBase64(v: string | undefined): string | null {
   } catch {
     /* fall through */
   }
-  console.warn('[config] GOOGLE_SERVICE_ACCOUNT_JSON_B64 is not base64 of a JSON object: Sheet mirror left unconfigured.');
+  log.warn('config_invalid', 'GOOGLE_SERVICE_ACCOUNT_JSON_B64 is not base64 of a JSON object: Sheet mirror left unconfigured.', {
+    name: 'GOOGLE_SERVICE_ACCOUNT_JSON_B64',
+  });
   return null;
 }
 
@@ -104,10 +107,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // hashes will not survive a restart, which is fine outside production.
     // Make it loud so a misconfigured prod (NODE_ENV not exactly 'production')
     // doesn't silently rotate secrets every restart.
-    console.warn(
-      `[config] WARNING: ${name} is unset — generating an EPHEMERAL value (env=${nodeEnv}). ` +
+    log.warn(
+      'config_ephemeral_secret',
+      `${name} is unset — generating an EPHEMERAL value (env=${nodeEnv}). ` +
         `Sessions and password hashes will not survive a restart. Set ${name} for stable behavior; ` +
         `a real deployment must run with NODE_ENV=production and ${name} set.`,
+      { name, env: nodeEnv },
     );
     return randomBytes(32).toString('hex');
   }

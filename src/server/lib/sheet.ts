@@ -3,6 +3,7 @@ import { sheets as sheetsApi, auth as gauth } from '@googleapis/sheets';
 import type { sheets_v4 } from '@googleapis/sheets';
 import type { Config } from '../config.js';
 import type { Repos } from '../db/repos.js';
+import { errField, silentLogger, type Logger } from './log.js';
 
 // M7 — Google Sheet mirror (read-only / one-way). The app pushes the live
 // inventory to tabs in the owner's Sheet so collaborators can consult it; the
@@ -124,7 +125,7 @@ async function push(
   });
 }
 
-export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
+export function createSheetMirror(config: Config, repos: Repos, logger: Logger = silentLogger): SheetMirror {
   const configured = Boolean(config.sheetId && config.googleServiceAccountJson);
   let client: sheets_v4.Sheets | null = null;
   let serviceAccountEmail: string | null = null;
@@ -169,7 +170,10 @@ export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
   function scheduleSync(): void {
     if (!configured) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void exportNow().catch(() => {}), config.sheetSyncDebounceMs);
+    timer = setTimeout(
+      () => void exportNow().catch((err) => logger.warn('sheet_sync_failed', 'sheet sync failed', { trigger: 'change', ...errField(err) })),
+      config.sheetSyncDebounceMs,
+    );
     timer.unref?.();
   }
 

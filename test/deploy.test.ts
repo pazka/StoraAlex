@@ -25,7 +25,8 @@ describe('Google service account from env', () => {
   });
 
   it('garbage base64 leaves the mirror unconfigured without logging the value', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // the warning is one JSON line on stdout (logging standard), never the value
+    const warn = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
     try {
       const secretish = Buffer.from('not json at all').toString('base64');
       const c = loadConfig({ ...base, GOOGLE_SERVICE_ACCOUNT_JSON_B64: secretish });
@@ -33,6 +34,8 @@ describe('Google service account from env', () => {
       const logged = warn.mock.calls.flat().join(' ');
       expect(logged).toContain('GOOGLE_SERVICE_ACCOUNT_JSON_B64');
       expect(logged).not.toContain(secretish);
+      const line = JSON.parse(String(warn.mock.calls.at(-1)![0]));
+      expect(line).toMatchObject({ level: 'warn', service: 'storalex', event: 'config_invalid' });
     } finally {
       warn.mockRestore();
     }

@@ -139,8 +139,8 @@ code 400 -H "cookie: $COOKIE" -F "file=@fake.png;type=image/png" "$BASE/api/medi
 
 step "no error-level logs"
 dk logs "$NAME" >"$TMP/container.log" 2>&1
-# pino: level 50 = error, 60 = fatal
-if grep -E '"level":(50|60)' "$TMP/container.log"; then fail "error-level log lines"; fi
+# "error" (logging standard); 50, 60 = pino error, fatal (kept: any pino line still counts)
+if grep -E '"level":(50|60|"error")' "$TMP/container.log"; then fail "error-level log lines"; fi
 if grep -Ei 'uncaught|unhandled|segmentation fault' "$TMP/container.log"; then fail "crash markers in logs"; fi
 
 SMOKE_OK=1
