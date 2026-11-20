@@ -190,6 +190,12 @@ What the pictures show today, pinned on purpose (not fixed by the harness, produ
 - X1: when the server is unreachable the app shows the login form with no message (`/api/me` fails, the
   session is treated as missing), so a logged-in user is told nothing about the outage.
 - H1 / H2: history lines name places and objects by number ("place #4", "item #1"), not by name.
+- D4: an archived object keeps its location and shows "in storage", "Move to…" and "Take out" above the
+  archived card (Broken chair, archived while in Garage).
+- Every logged-in page: the runner's fonts have no glyph for the Scan icon `⌖` of the bottom navigation, so it
+  is drawn as an empty box (same on every run; a phone or desktop with other fonts draws the symbol).
+- Baselines are made by the runner's Chrome (`visual/baseline/chrome.txt`); a local Chrome with other fonts
+  differs. New baselines come from the CI artifact or the CI log (`visual/from-log.mjs`).
 
 ## Deliberately not covered
 
