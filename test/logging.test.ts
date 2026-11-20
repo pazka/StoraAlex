@@ -49,6 +49,7 @@ async function appWith(level = 'debug') {
   app.get('/boom/:id', async () => {
     throw new Error('kaput');
   });
+  app.get('/upstream/:id', async (_req, reply) => reply.code(502).send({ error: 'upstream refused' }));
   app.get('/slow/:id', async () => {
     await new Promise((r) => setTimeout(r, SLOW_MS + 100));
     return { ok: true };
@@ -141,6 +142,17 @@ describe('request lines', () => {
     const text = JSON.stringify(l);
     expect(text).not.toContain('secret-42');
     expect(text).not.toContain('token=abc');
+  });
+
+  it('a 5xx the app answers on purpose (no exception) is one warn line, not an error', async () => {
+    const { app, lines } = await appWith('info');
+    close = () => app.close();
+    const res = await app.inject({ method: 'GET', url: '/upstream/9?x=y' });
+    expect(res.statusCode).toBe(502);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 'warn', event: 'request_5xx', route: '/upstream/:id', status: 502 });
+    expect(lines[0]!.err).toBeUndefined();
+    expect(JSON.stringify(lines)).not.toContain('x=y');
   });
 
   it('a refused login is one warn line, without the username or the password', async () => {

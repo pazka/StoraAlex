@@ -101,9 +101,10 @@ export async function buildApp(config: Config, db: DB, opts: BuildOptions = {}) 
   app.addHook('onError', async (req, _reply, err) => {
     failures.set(req, err);
   });
-  // One line per answer only when it matters: a 5xx (error, with `err`), a 4xx on an auth route (warn),
-  // a slow answer (warn); anything else at debug; /healthz never above debug. `route` is the route
-  // template, never the raw path or its query string.
+  // One line per answer only when it matters: a 5xx from a thrown error (error, with `err`), a 5xx the
+  // app answered on purpose, e.g. 502 when Google refuses a Sheet export (warn), a 4xx on an auth route
+  // (warn), a slow answer (warn); anything else at debug; /healthz never above debug. `route` is the
+  // route template, never the raw path or its query string.
   app.addHook('onResponse', async (req, reply) => {
     const route = req.routeOptions.url ?? '(none)';
     const status = reply.statusCode;
@@ -111,11 +112,11 @@ export async function buildApp(config: Config, db: DB, opts: BuildOptions = {}) 
     if (route === '/healthz') return logger.debug('healthz', 'healthz', fields);
     if (status >= 500) {
       const failure = failures.get(req);
-      return logger.error(
-        'request_failed',
-        'server error',
-        failure === undefined ? fields : { ...fields, ...errField(failure, [req.url, req.url.split('?')[0] ?? '']) },
-      );
+      if (failure === undefined) return logger.warn('request_5xx', 'answered with a server error status', fields);
+      return logger.error('request_failed', 'server error', {
+        ...fields,
+        ...errField(failure, [req.url, req.url.split('?')[0] ?? '']),
+      });
     }
     if (status >= 400 && route.startsWith('/api/auth/')) return logger.warn('auth_refused', 'auth request refused', fields);
     if ((fields.dur_ms as number) > SLOW_MS) return logger.warn('request_slow', 'slow request', fields);

@@ -60,9 +60,10 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
 - **Logging standard** (hosh-management AGENTS.md §11, `test/logging.test.ts`, code in
   `src/server/lib/log.ts`) — one JSON line per event on stdout (`ts`, `level`, `service`,
   `version`, `event`, `msg`); a real server process prints `startup` (version, port, data dir
-  writable, config names without values) and `shutdown` on SIGTERM, nothing on stderr; a 5xx is
-  one `request_failed` error line with the route template and `err` (type, message, stack),
-  never the raw path or query; a refused login is one `auth_refused` warn line without the
+  writable, config names without values) and `shutdown` on SIGTERM, nothing on stderr; a 5xx
+  from a thrown error is one `request_failed` error line with the route template and `err`
+  (type, message, stack), never the raw path or query; a 5xx the app answers on purpose (502 when
+  Google refuses a Sheet export) is a `request_5xx` warn; a refused login is one `auth_refused` warn line without the
   username or password; other answers and `/healthz` stay at debug; a request slower than 1 s is
   a `request_slow` warn; `X-Request-Id` is echoed (plain token, at most 64 chars) or generated on
   every answer, the auth gate's 401 included; e-mail addresses never reach `err`. Fastify's own
