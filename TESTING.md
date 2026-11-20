@@ -35,6 +35,7 @@ Runs on every pull request, on `main`, and on `agent/**` branches.
 |---|---|
 | `test (node 26)` | `npm ci`, typecheck, vitest, build — inside `node:26-slim`, same family as the Dockerfile |
 | `container smoke` | builds the Dockerfile, runs `scripts/check-node-version.sh` on it (and asserts the check rejects unpatched `node:24.21.0-slim`), then `scripts/smoke.sh`, `scripts/compose-smoke.sh legacy`, `scripts/register-check.sh` (+ a rejected non-read-only compose), `compose-smoke.sh template` and `cutover` |
+| `visual regression` | builds the Dockerfile, runs `visual/run.sh` (section "Visual use cases" below), uploads shots, diffs and `report.json` as the artifact `visual-<sha>` |
 
 `scripts/check-node-version.sh <image>` fails if the image's Node is EOL or below the
 patched minimum of its line (CVE-2026-111497, pazka/hosh-management#5). It also runs in
@@ -89,10 +90,112 @@ not), legacy stopped, volume copied and chowned to 10001 (sha256 identical file 
 a second copy refused, template up on the copy (same login, item, photo bytes), then
 rollback: legacy up again on its untouched volume.
 
+## Visual use cases (visual regression, hosh-management AGENTS.md §3)
+
+`bash visual/run.sh storalex:smoke` (CI job `visual regression`; `--update` rewrites the baselines, QA only):
+the built image runs as `docker-compose.example.yml` does (uid 10001, read-only rootfs, tmpfs /tmp, cap_drop ALL,
+no-new-privileges, pids/memory limits, `PORT=8000`, `NODE_ENV=production`, `TRUST_PROXY` of `.env.example`,
+throwaway fake secrets, Sheet mirror unconfigured) on a **fresh volume**, published on 127.0.0.1 only. The run
+checks uid 10001, a read-only rootfs and a fresh instance, then `visual/shoot.mjs` runs with the **image's own
+node** (same hardening, no package): it drives two headless Chromes of the runner (mouse for 1400 / 1024, touch
+for 390) over the DevTools protocol (`visual/cdp.mjs`, Node built-ins only, as pazka/hosh-hub `tools/interact.mjs`).
+Pages are opened at `http://localhost:<port>` (Chrome treats localhost as secure, so the production
+`__Host-storalex_sid` Secure cookie works); every other host name resolves to nothing.
+
+Data, all made through the API in a fixed order (`visual/cases.mjs` `SEED`):
+- phase **fresh**: nothing; then `POST /api/auth/setup` makes **alex** (his session cookie is given to the
+  logged-in cases);
+- phase **empty**: alex only;
+- phase **seeded**: user **marie** (never logged in); tags *Expo Lyon 2026* (event), *Fragile* (flag), *Loaned*
+  (other); 2 photos (PNG made with zlib, re-encoded by sharp); places *Unit 12* (PLC-000001, photo, info, tag
+  Expo) › *Shelf 1*, *Shelf 2*; *Garage* (tag Loaned); *Old cabinet* (archived); objects *Camera tripod*
+  (OBJ-000001, Shelf 1, photo, €129.99, notes, tags Expo + Fragile), *Canvas 80x60* (Shelf 1, Expo),
+  *Projector* (Unit 12, €450), *Folding table* (out of storage), *Desk lamp* (Garage), *Broken chair*
+  (archived); 2 blank object labels printed (OBJ-000007, OBJ-000008). Each object is finished in its own
+  second (the list is ordered by `updated_at`, 1 s resolution) and the list is read back and checked;
+- phase **mutating** (last): cases that change data, each resetting what it changes before every width.
+
+Determinism: the page clock starts at 2026-01-01 12:00 UTC and `Math.random` is seeded; no camera (getUserMedia
+rejects, so the scanner shows its **manual-entry fallback**, as on a device without a camera); no service worker
+(each shot is a first visit); animations, transitions and caret off; timezone Europe/Paris, locale en-US;
+viewport height 900 (phone 844), full-page shots (the viewport grows to the page height so the fixed bottom bar
+stays at the bottom), modals shot as the screen shows them. The server stamps history and last login with
+SQLite `datetime('now')` and the image has no fake clock, so every `YYYY-MM-DD HH:MM:SS` text is replaced by
+`2026-01-01 12:00:00` just before the shot. Each shot uses its own `X-Forwarded-For` address (trusted from the
+docker network, as on the box) so the app's per-IP rate limits, unchanged, are never reached by ~140 page loads.
+A shot fails on a page exception or `alert()/confirm()`, a page that never gets ready, a missing baseline, a
+size change or more than 0.1 % of pixels differing by more than 24 on a channel; the run fails too if the app
+logs an error-level line. Shots, diffs (`diff/`), `report.json` (requests of every shot, Chrome version) and the
+app log are in the CI artifact `visual-<sha>`.
+
+Every case is shot at **1400, 1024 and 390 px** (`visual/baseline/<id>-<width>.png`). The bottom navigation
+(Scan, Items, Places, Tags, Labels) is on every logged-in page at every width: the app has no other menu.
+
+| id | page / state | steps |
+|---|---|---|
+| S1-first-run-setup | fresh instance: any URL lands on `/login` with "Welcome — create the first account", "Create account" | open `/` |
+| E1-items-empty | Objects, no object: "No objects yet…" | alex, `/items` |
+| E2-places-empty | Places, none: "No places yet…" | alex, `/places` |
+| E3-tags-empty | Tags: the new-tag form, no tag list | alex, `/tags` |
+| E4-history-empty | History: "No history yet." | alex, `/history` |
+| E5-archive-empty | Archive: "Nothing archived." | alex, `/archive` |
+| L1-login | login form (instance set up), logged out | `/login` |
+| L2-login-wrong-password | a page needing a session sends to `/login`; wrong password → "invalid credentials" | `/items`, type alex + a wrong password, Sign in |
+| X1-server-unreachable | server unreachable (every `/api`, `/media` request fails): the login form, no message | alex, `/`, API down |
+| SC1-scan-home | Scan (home): manual code entry ("No camera available"), Pick place / Take out, empty preview, CONFIRM / CANCEL disabled | alex, `/` |
+| SC2-scan-object-then-place | "1 object → Garage", "Camera tripod", CONFIRM enabled | enter OBJ-000001, then PLC-000004 |
+| SC3-scan-unknown-code | "Unknown code OBJ-999999" | enter OBJ-999999 |
+| SC4-scan-take-out | "1 object → out of storage", Take out highlighted | enter OBJ-000003, click Take out |
+| SC5-scan-pick-place | modal "Destination place": search + 4 places (archived one hidden) | click Pick place |
+| SC6-scan-blank-label | a blank label opens New object: "Label OBJ-000007 will be attached." | enter OBJ-000007 |
+| I1-items | Objects: 5 objects (newest first), photo / placeholder, code, in storage / out | `/items` |
+| I2-items-search | search "ca": Canvas 80x60, Camera tripod | `/items?q=ca` |
+| I3-items-out | filter Out: Folding table | `/items?status=out` |
+| I4-items-by-tag | "Filtered by tag Expo Lyon 2026" + clear, 2 objects | `/items?tag=1` (Tags → Objects) |
+| I5-items-select | select mode: checkboxes, Projector + Desk lamp ticked, bar "2 selected · Move to… · Take out" | click Select, tick 2 |
+| I6-items-no-match | search without result: "No objects yet…" (pinned wording) | `/items?q=zzz` |
+| D1-item-detail | Camera tripod: photo, code, in storage, price, notes, location Unit 12 › Shelf 1, Move to… / Take out, 2 tags, Edit / History, Archive | `/items/1` |
+| D2-item-out-of-storage | Folding table: out, location —, "Place in storage…", "No tags." | `/items/4` |
+| D3-item-add-tag | the available tags "+ Fragile", "+ Loaned" | `/items/2`, click + Tag |
+| D4-item-archived | Broken chair: "Archived. Restore it, or delete it permanently." | `/items/6` |
+| D5-item-not-found | an object id that does not exist: the error message | `/items/999` |
+| F1-item-new | New object: "A new code will be allocated…", Scan label, name, photo, location Choose, price, notes | `/items/new` |
+| F2-item-edit | Edit object: fields filled, photo, Replace / Remove | `/items/1/edit` |
+| F3-item-scan-label | modal "Scan this object's label" with the manual-entry fallback | `/items/new`, click Scan label |
+| P1-places | Places: Garage, Unit 12 (top level only) | `/places` |
+| P2-place-detail | Unit 12: photo, info, Move under…, tag, 2 nested places, 1 object, Edit place, Archive | `/places/1` |
+| P3-place-nested | Shelf 1: "Inside: Unit 12", Move to top level, no nested place, 2 objects | `/places/2` |
+| P4-place-archived | Old cabinet: archived card | `/places/5` |
+| P5-place-new | New place form | `/places/new` |
+| P6-place-edit | Edit place: Unit 12 filled | `/places/1/edit` |
+| P7-places-by-tag | "Places tagged Expo Lyon 2026" + clear: Unit 12 | `/places?tag=1` (Tags → Places) |
+| T1-tags | Tags: form + groups Events / Flags / Other with colour dots and Objects · Places links | `/tags` |
+| LB1-labels | Print labels: type Object, count 24, "Generate 24 object labels (PDF)" | `/labels` |
+| LB2-labels-place | type Place selected: "Generate 24 place labels (PDF)" | `/labels`, click Place (PLC-…) |
+| H1-history | History: every movement, newest first (timestamps normalised) | `/history` |
+| H2-history-item | History of Camera tripod: "item #1", ‹ Back | `/history?entity_type=item&entity_id=1` (object → History) |
+| A1-admin | Admin: Excel export / import, Google Sheet "Not configured.", links Archive and Users | `/admin` (header 👤 alex) |
+| A2-archive | Archive: Old cabinet and Broken chair with Restore / Delete | `/archive` |
+| U1-users | Users: add form, alex "(you)", marie "last login: never" | `/users` |
+| U2-users-password | the new-password field under marie | `/users`, click marie's Password |
+| M1-scan-confirm-move | after CONFIRM: "✓ Moved 1 object to Garage." (Folding table put back out first) | enter OBJ-000004, PLC-000004, CONFIRM |
+
+Not shot (not a page state, or not reachable without a real device): the label PDF itself (it opens in a new tab;
+its content is tested in `test/` and `scripts/smoke.sh`), the Excel file, a live camera stream, the browser's own
+`confirm()` dialogs of Delete (the harness fails on any dialog), the "Uploading…/Saving…" instants.
+
+What the pictures show today, pinned on purpose (not fixed by the harness, production code unchanged):
+- I6: a search or filter without result says "No objects yet. Scan a blank label or tap “New”.", the wording
+  of an empty inventory.
+- X1: when the server is unreachable the app shows the login form with no message (`/api/me` fails, the
+  session is treated as missing), so a logged-in user is told nothing about the outage.
+- H1 / H2: history lines name places and objects by number ("place #4", "item #1"), not by name.
+
 ## Deliberately not covered
 
-- The React PWA in a browser (no browser test runner; adding one needs a new
-  dependency — owner decision). The build step does prove it compiles.
+- The React PWA in a browser beyond what it shows: no browser test runner package (a new dependency is an
+  owner decision). The visual harness below drives the runner's Chrome with Node built-ins and pins every
+  page and state a user can reach; behaviour behind the pictures is covered by the API tests.
 - Google Sheet sync against the real API (needs credentials; only the
   unconfigured path is tested).
 - Excel import of real-world files beyond the round-trip test.

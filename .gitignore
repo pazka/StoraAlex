@@ -26,3 +26,6 @@ media/
 .DS_Store
 *.log
 coverage/
+
+# visual regression output (visual/run.sh)
+visual/out/
