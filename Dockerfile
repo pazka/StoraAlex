@@ -20,6 +20,9 @@ RUN npm run build
 # ---- runtime stage: production deps only, non-root ----
 FROM node:26.13.1-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS runtime
 ENV NODE_ENV=production
+# the `version` field of every log line (release.yml passes the release tag)
+ARG VERSION=dev
+ENV APP_VERSION=${VERSION}
 ENV DATA_DIR=/data
 ENV PORT=8080
 WORKDIR /app

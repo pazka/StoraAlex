@@ -3,6 +3,7 @@ import { sheets as sheetsApi, auth as gauth } from '@googleapis/sheets';
 import type { sheets_v4 } from '@googleapis/sheets';
 import type { Config } from '../config.js';
 import type { Repos } from '../db/repos.js';
+import { errField, silentLogger, type Logger } from './log.js';
 
 // M7 — Google Sheet mirror (read-only / one-way). The app pushes the live
 // inventory to tabs in the owner's Sheet so collaborators can consult it; the
@@ -26,11 +27,25 @@ export interface SheetStatus {
 export interface SheetMirror {
   readonly configured: boolean;
   status(): SheetStatus;
-  /** Push the full inventory now. Throws if not configured or on a Google error. */
-  exportNow(): Promise<void>;
+  /**
+   * Push the full inventory now; resolves to the rows pushed per tab, or null when a running sync was asked
+   * to go again instead. Throws if not configured or on a Google error.
+   */
+  exportNow(): Promise<SyncCounts | null>;
+  /** exportNow() with one line at start and one at end (logging standard); never throws. */
+  sync(trigger: SyncTrigger): Promise<void>;
   /** Debounced push after a data change (no-op if not configured). */
   scheduleSync(): void;
 }
+
+/** Rows pushed per tab (headers not counted). */
+export type SyncCounts = { places: number; items: number; tags: number };
+export type SyncTrigger = 'boot' | 'reconcile' | 'change';
+/** Builds the Sheets client from the service-account credentials (tests pass a fake one). */
+export type SheetClientFactory = (credentials: Record<string, unknown>) => sheets_v4.Sheets;
+
+const googleClient: SheetClientFactory = (credentials) =>
+  sheetsApi({ version: 'v4', auth: new gauth.GoogleAuth({ credentials, scopes: SCOPES }) });
 
 type Cell = string | number;
 
@@ -124,7 +139,12 @@ async function push(
   });
 }
 
-export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
+export function createSheetMirror(
+  config: Config,
+  repos: Repos,
+  logger: Logger = silentLogger,
+  makeClient: SheetClientFactory = googleClient,
+): SheetMirror {
   const configured = Boolean(config.sheetId && config.googleServiceAccountJson);
   let client: sheets_v4.Sheets | null = null;
   let serviceAccountEmail: string | null = null;
@@ -138,26 +158,29 @@ export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
     if (!client) {
       const credentials = loadCredentials(config.googleServiceAccountJson!);
       serviceAccountEmail = typeof credentials.client_email === 'string' ? credentials.client_email : null;
-      const authClient = new gauth.GoogleAuth({ credentials, scopes: SCOPES });
-      client = sheetsApi({ version: 'v4', auth: authClient });
+      client = makeClient(credentials);
     }
     return client;
   }
 
-  async function exportNow(): Promise<void> {
+  async function exportNow(): Promise<SyncCounts | null> {
     if (!configured) throw new Error('Sheet mirror not configured (set SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON)');
     if (inFlight) {
       needsResync = true; // a sync is running; it will pick up the latest data
-      return;
+      return null;
     }
     inFlight = true;
+    let counts: SyncCounts = { places: 0, items: 0, tags: 0 };
     try {
       do {
         needsResync = false;
-        await push(getClient(), config.sheetId!, buildRows(repos));
+        const rows = buildRows(repos);
+        await push(getClient(), config.sheetId!, rows);
+        counts = { places: rows.places.length, items: rows.items.length, tags: rows.tags.length };
         lastSync = new Date().toISOString();
         lastError = null;
       } while (needsResync);
+      return counts;
     } catch (err) {
       lastError = describeError(err, serviceAccountEmail);
       throw new Error(lastError); // clean, actionable message (no giant Gaxios dump)
@@ -166,10 +189,23 @@ export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
     }
   }
 
+  async function sync(trigger: SyncTrigger): Promise<void> {
+    const t0 = performance.now();
+    const dur = () => Math.round(performance.now() - t0);
+    logger.debug('sheet_sync_start', 'sheet sync started', { trigger });
+    try {
+      const rows = await exportNow();
+      if (rows === null) return logger.debug('sheet_sync_queued', 'sheet sync queued behind a running one', { trigger });
+      logger.info('sheet_sync_done', 'sheet sync done', { trigger, dur_ms: dur(), rows });
+    } catch (err) {
+      logger.warn('sheet_sync_failed', 'sheet sync failed', { trigger, dur_ms: dur(), ...errField(err) });
+    }
+  }
+
   function scheduleSync(): void {
     if (!configured) return;
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => void exportNow().catch(() => {}), config.sheetSyncDebounceMs);
+    timer = setTimeout(() => void sync('change'), config.sheetSyncDebounceMs);
     timer.unref?.();
   }
 
@@ -184,6 +220,7 @@ export function createSheetMirror(config: Config, repos: Repos): SheetMirror {
       syncing: inFlight,
     }),
     exportNow,
+    sync,
     scheduleSync,
   };
 }

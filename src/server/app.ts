@@ -13,6 +13,7 @@ import type { DB } from './db/index.js';
 import { createRepos } from './db/repos.js';
 import { createSheetMirror } from './lib/sheet.js';
 import { sessionCookieName, hashToken } from './auth/session.js';
+import { errField, log, requestId, silentLogger, SLOW_MS, type Fields, type Logger } from './lib/log.js';
 
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
@@ -60,9 +61,20 @@ function fastifyTrustProxy(tp: Config['trustProxy']) {
   return (_address: string, hop: number) => hop < tp;
 }
 
-export async function buildApp(config: Config, db: DB) {
+export interface BuildOptions {
+  /** Where the request lines go (default: stdout, or nothing in tests). */
+  logger?: Logger;
+}
+
+export async function buildApp(config: Config, db: DB, opts: BuildOptions = {}) {
+  const logger = opts.logger ?? (config.env === 'test' ? silentLogger : log);
   const app = Fastify({
-    logger: config.env === 'test' ? false : { level: config.isProd ? 'info' : 'debug' },
+    // Fastify's own logger stays off: it wrote every request with its raw URL and the client IP.
+    // Requests are logged by the hooks below, in the hosh.it format (lib/log.ts).
+    logger: false,
+    // X-Request-Id from the edge when it is a plain token of at most 64 chars, else a new one
+    requestIdHeader: false,
+    genReqId: (req) => requestId(req.headers['x-request-id']),
     trustProxy: fastifyTrustProxy(config.trustProxy),
     routerOptions: { caseSensitive: true }, // pin the default the auth gate's path matching relies on
     bodyLimit: 1024 * 1024, // 1 MiB JSON; image bytes go through multipart instead
@@ -76,8 +88,40 @@ export async function buildApp(config: Config, db: DB) {
   app.decorate('appConfig', config);
   app.decorate('db', db);
   app.decorate('repos', repos);
-  app.decorate('sheetMirror', createSheetMirror(config, repos));
+  app.decorate('sheetMirror', createSheetMirror(config, repos, logger));
   app.decorateRequest('user', null);
+  app.decorate('logger', logger);
+
+  // Logging standard (hosh-management AGENTS.md section 11). Registered first, so every answer, a 401
+  // of the auth gate included, carries X-Request-Id and goes through the request line below.
+  const failures = new WeakMap<object, unknown>();
+  app.addHook('onRequest', async (req, reply) => {
+    reply.header('X-Request-Id', req.id);
+  });
+  app.addHook('onError', async (req, _reply, err) => {
+    failures.set(req, err);
+  });
+  // One line per answer only when it matters: a 5xx from a thrown error (error, with `err`), a 5xx the
+  // app answered on purpose, e.g. 502 when Google refuses a Sheet export (warn), a 4xx on an auth route
+  // (warn), a slow answer (warn); anything else at debug; /healthz never above debug. `route` is the
+  // route template, never the raw path or its query string.
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions.url ?? '(none)';
+    const status = reply.statusCode;
+    const fields: Fields = { req_id: req.id, method: req.method, route, status, dur_ms: Math.round(reply.elapsedTime) };
+    if (route === '/healthz') return logger.debug('healthz', 'healthz', fields);
+    if (status >= 500) {
+      const failure = failures.get(req);
+      if (failure === undefined) return logger.warn('request_5xx', 'answered with a server error status', fields);
+      return logger.error('request_failed', 'server error', {
+        ...fields,
+        ...errField(failure, [req.url, req.url.split('?')[0] ?? '']),
+      });
+    }
+    if (status >= 400 && route.startsWith('/api/auth/')) return logger.warn('auth_refused', 'auth request refused', fields);
+    if ((fields.dur_ms as number) > SLOW_MS) return logger.warn('request_slow', 'slow request', fields);
+    logger.debug('request', 'request', fields);
+  });
 
   await app.register(cookie, { secret: config.sessionKey });
   await app.register(helmet, {

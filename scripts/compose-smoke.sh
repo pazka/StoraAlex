@@ -280,7 +280,7 @@ recreate() {
 no_error_logs() {
   step "no error-level logs"
   dk logs "$CONTAINER" >"$WORK/container.log" 2>&1
-  if grep -E '"level":(50|60)' "$WORK/container.log"; then fail "error-level log lines"; fi
+  if grep -E '"level":(50|60|"error")' "$WORK/container.log"; then fail "error-level log lines"; fi
   if grep -Ei 'uncaught|unhandled|segmentation fault' "$WORK/container.log"; then fail "crash markers in logs"; fi
 }
 

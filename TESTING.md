@@ -57,6 +57,26 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
 - **sharp via HTTP** — JPEG with EXIF uploaded through `/api/media` is stored as an
   EXIF-free webp with a random name and served back; disguised non-image → 400.
 - **pdf-lib/qrcode** — label sheet is a valid A4 PDF, 24 labels/page, limits enforced.
+- **Logging standard** (hosh-management AGENTS.md §11, `test/logging.test.ts`, code in
+  `src/server/lib/log.ts`) — one JSON line per event on stdout (`ts`, `level`, `service`,
+  `version`, `event`, `msg`); a real server process prints `startup` (version, port, data dir
+  writable, config names without values) and `shutdown` on SIGTERM, nothing on stderr; a 5xx
+  from a thrown error is one `request_failed` error line with the route template and `err`
+  (type, message, stack), never the raw path or query; a 5xx the app answers on purpose (502 when
+  Google refuses a Sheet export) is a `request_5xx` warn; a refused login is one `auth_refused` warn line without the
+  username or password; other answers and `/healthz` stay at debug; a request slower than 1 s is
+  a `request_slow` warn; `X-Request-Id` is echoed (plain token, at most 64 chars) or generated on
+  every answer, the auth gate's 401 included; e-mail addresses never reach `err`. Fastify's own
+  logger is off (it wrote every request with its raw URL and the client IP). `LOG_LEVEL`
+  (or `APP_LOG_LEVEL`), default `info`. The smokes and the visual harness fail on any
+  `"level":"error"` line (and still on pino's 50/60).
+  A `NODE_ENV=production` server process (the one where Fastify's logger used to be on) answers a
+  request with a query string and a refused login: every stdout line is ours, with no path, query,
+  IP or e-mail. Background jobs (`lib/jobs.ts` session prune, `lib/sheet.ts` `sync()` for boot,
+  reconcile and change) write a start line (debug) and an end line with `dur_ms` and counts
+  (`deleted`; `rows` per tab), or a `*_failed` warn with `err`; the Sheet tests use a fake client
+  (`createSheetMirror(..., makeClient)`), never Google. The hourly prune timer itself is not
+  driven by a test (the job it calls is). `config_ephemeral_secret` names the variable, never a value.
 - **Production mode** — refuses to boot without secrets, `trustProxy` = 1 hop
   (and `TRUST_PROXY=<n>` really makes `req.ip` the client n hops back),
   `__Host-` cookie with HttpOnly/Secure/SameSite=Strict/no Domain, signed; CSP header.
