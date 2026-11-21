@@ -3,9 +3,11 @@ import path from 'node:path';
 import { loadConfig, loadEnvFile } from './config.js';
 import { openDb } from './db/index.js';
 import { buildApp } from './app.js';
-import { configNamesSet, errField, log } from './lib/log.js';
+import { configNamesSet, errField, log, reconfigureLog } from './lib/log.js';
+import { pruneSessions } from './lib/jobs.js';
 
 loadEnvFile();
+reconfigureLog(); // LOG_LEVEL / APP_LOG_LEVEL / APP_VERSION set only in a local .env
 const config = loadConfig();
 const db = openDb(config.dbPath);
 // No admin is seeded: on first run (no users) the app prompts to create the
@@ -14,33 +16,15 @@ const db = openDb(config.dbPath);
 const app = await buildApp(config, db);
 
 // Periodically drop expired sessions (one line at start and at end: logging standard).
-const prune = setInterval(() => {
-  const t0 = performance.now();
-  log.debug('session_prune_start', 'session prune started');
-  try {
-    app.repos.sessions.deleteExpired();
-    log.info('session_prune_done', 'session prune done', { dur_ms: Math.round(performance.now() - t0) });
-  } catch (err) {
-    log.warn('session_prune_failed', 'session prune failed', { dur_ms: Math.round(performance.now() - t0), ...errField(err) });
-  }
-}, 60 * 60 * 1000);
+const prune = setInterval(() => pruneSessions(app.repos, log), 60 * 60 * 1000);
 prune.unref();
 
 // Google Sheet mirror: push once on boot, then reconcile periodically (the
-// debounced on-change push handles freshness between reconciles).
-function sheetSync(trigger: 'boot' | 'reconcile') {
-  const t0 = performance.now();
-  log.debug('sheet_sync_start', 'sheet sync started', { trigger });
-  return app.sheetMirror.exportNow().then(
-    () => log.info('sheet_sync_done', 'sheet sync done', { trigger, dur_ms: Math.round(performance.now() - t0) }),
-    (err) =>
-      log.warn('sheet_sync_failed', 'sheet sync failed', { trigger, dur_ms: Math.round(performance.now() - t0), ...errField(err) }),
-  );
-}
+// debounced on-change push handles freshness between reconciles). sync() logs its own lines.
 let reconcile: ReturnType<typeof setInterval> | undefined;
 if (app.sheetMirror.configured) {
-  void sheetSync('boot');
-  reconcile = setInterval(() => void sheetSync('reconcile'), 5 * 60 * 1000);
+  void app.sheetMirror.sync('boot');
+  reconcile = setInterval(() => void app.sheetMirror.sync('reconcile'), 5 * 60 * 1000);
   reconcile.unref();
 }
 

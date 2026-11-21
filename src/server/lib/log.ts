@@ -60,6 +60,14 @@ export function levelFromEnv(env: NodeJS.ProcessEnv = process.env): string {
 
 export const log = createLogger(levelFromEnv(), process.stdout, process.env.APP_VERSION || 'dev');
 
+/**
+ * Re-reads LOG_LEVEL / APP_LOG_LEVEL / APP_VERSION into `log`: `log` is built when this module is imported,
+ * before index.ts loads a local .env (`npm run dev`). Containers get them as real env vars either way.
+ */
+export function reconfigureLog(env: NodeJS.ProcessEnv = process.env): void {
+  Object.assign(log, createLogger(levelFromEnv(env), process.stdout, env.APP_VERSION || 'dev'));
+}
+
 /** A logger that writes nothing (unit tests). */
 export const silentLogger = createLogger('error', { write: () => true }, 'test');
 silentLogger.error = () => {};

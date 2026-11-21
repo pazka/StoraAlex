@@ -70,6 +70,13 @@ Existing behaviour tests (`api`, `data`, `images`, `users`) plus `test/upgrade.t
   logger is off (it wrote every request with its raw URL and the client IP). `LOG_LEVEL`
   (or `APP_LOG_LEVEL`), default `info`. The smokes and the visual harness fail on any
   `"level":"error"` line (and still on pino's 50/60).
+  A `NODE_ENV=production` server process (the one where Fastify's logger used to be on) answers a
+  request with a query string and a refused login: every stdout line is ours, with no path, query,
+  IP or e-mail. Background jobs (`lib/jobs.ts` session prune, `lib/sheet.ts` `sync()` for boot,
+  reconcile and change) write a start line (debug) and an end line with `dur_ms` and counts
+  (`deleted`; `rows` per tab), or a `*_failed` warn with `err`; the Sheet tests use a fake client
+  (`createSheetMirror(..., makeClient)`), never Google. The hourly prune timer itself is not
+  driven by a test (the job it calls is). `config_ephemeral_secret` names the variable, never a value.
 - **Production mode** — refuses to boot without secrets, `trustProxy` = 1 hop
   (and `TRUST_PROXY=<n>` really makes `req.ip` the client n hops back),
   `__Host-` cookie with HttpOnly/Secure/SameSite=Strict/no Domain, signed; CSP header.

@@ -80,9 +80,8 @@ export function createRepos(db: DB) {
     delete: (id: string): void => {
       run('DELETE FROM session WHERE id = ?', [id]);
     },
-    deleteExpired: (): void => {
-      run("DELETE FROM session WHERE expires_at <= datetime('now')");
-    },
+    /** Returns the number of sessions deleted. */
+    deleteExpired: (): number => Number(run("DELETE FROM session WHERE expires_at <= datetime('now')").changes),
   };
 
   // ============================ photos ============================

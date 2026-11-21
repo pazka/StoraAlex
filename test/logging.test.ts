@@ -1,8 +1,9 @@
 // Logging standard (pazka/hosh-management AGENTS.md section 11): one JSON object per line on stdout,
 // the startup / shutdown lines, one error line, which requests are logged, and what never is.
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,11 +12,15 @@ import { openDb } from '../src/server/db/index.ts';
 import { buildApp } from '../src/server/app.ts';
 import { createRepos } from '../src/server/db/repos.ts';
 import { hashPassword } from '../src/server/auth/password.ts';
+import { createSheetMirror, type SheetClientFactory } from '../src/server/lib/sheet.ts';
+import { pruneSessions } from '../src/server/lib/jobs.ts';
 import {
   configNamesSet,
   createLogger,
   errField,
   levelFromEnv,
+  log,
+  reconfigureLog,
   requestId,
   SLOW_MS,
 } from '../src/server/lib/log.ts';
@@ -268,3 +273,206 @@ describe('server process', () => {
     }
   }, 30_000);
 });
+
+// ---------------------------------------------------------------------------------------------------------
+// Background jobs: one line at start and one at end with dur_ms and counts; failures are warn lines with err.
+
+const SA_EMAIL = 'robot-sync@storalex-proj.iam.gserviceaccount.com';
+const SA_JSON = JSON.stringify({ type: 'service_account', client_email: SA_EMAIL, private_key: 'not-a-key' });
+
+function sheetConfig() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-sheet-'));
+  return loadConfig({
+    NODE_ENV: 'test',
+    APP_PEPPER: 'a'.repeat(32),
+    SESSION_KEY: 'b'.repeat(32),
+    DB_PATH: ':memory:',
+    DATA_DIR: dir,
+    MEDIA_DIR: dir,
+    SHEET_ID: 'sheet-id-123',
+    GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON,
+    SHEET_SYNC_DEBOUNCE_MS: '10',
+  });
+}
+
+/** A fake Sheets client: every call answers `answer()` (a value, or a rejected promise). */
+function fakeClient(answer: () => Promise<unknown>): SheetClientFactory {
+  return () =>
+    ({
+      spreadsheets: {
+        get: answer,
+        batchUpdate: answer,
+        values: { batchClear: answer, batchUpdate: answer },
+      },
+    }) as never;
+}
+
+const google403 = () => Promise.reject(Object.assign(new Error('The caller does not have permission'), { code: 403 }));
+
+describe('background jobs', () => {
+  it('session prune: start at debug, done at info with dur_ms and the number deleted', () => {
+    const repos = createRepos(openDb(':memory:'));
+    const uid = repos.users.create('pruner', 'x');
+    repos.sessions.create('old-1', uid, '2000-01-01 00:00:00', null);
+    repos.sessions.create('old-2', uid, '2000-01-01 00:00:00', null);
+    repos.sessions.create('live', uid, '2999-01-01 00:00:00', null);
+    const { logger, lines } = capture('debug');
+    pruneSessions(repos, logger);
+    expect(lines.map((l) => l.event)).toEqual(['session_prune_start', 'session_prune_done']);
+    expect(lines[1]).toMatchObject({ level: 'info', deleted: 2 });
+    expect(typeof lines[1]!.dur_ms).toBe('number');
+    expect(repos.sessions.findValidUser('live')?.id).toBe(uid);
+  });
+
+  it('session prune: a failure is one warn line with err, and does not throw', () => {
+    const repos = createRepos(openDb(':memory:'));
+    repos.sessions.deleteExpired = () => {
+      throw new Error('database is locked');
+    };
+    const { logger, lines } = capture('info');
+    expect(() => pruneSessions(repos, logger)).not.toThrow();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 'warn', event: 'session_prune_failed', err: { message: 'database is locked' } });
+  });
+
+  it('sheet sync done: info line with dur_ms and the rows pushed per tab', async () => {
+    const repos = createRepos(openDb(':memory:'));
+    repos.tags.create('fragile', null, 'event');
+    repos.tags.create('winter', '#00f', 'event');
+    const { logger, lines } = capture('debug');
+    const mirror = createSheetMirror(sheetConfig(), repos, logger, fakeClient(async () => ({ data: { sheets: [] } })));
+    await mirror.sync('reconcile');
+    expect(lines.map((l) => l.event)).toEqual(['sheet_sync_start', 'sheet_sync_done']);
+    expect(lines[1]).toMatchObject({ level: 'info', trigger: 'reconcile', rows: { places: 0, items: 0, tags: 2 } });
+    expect(typeof lines[1]!.dur_ms).toBe('number');
+  });
+
+  it('sheet sync after a change: a Google refusal is one warn line, the service account e-mail never logged', async () => {
+    const repos = createRepos(openDb(':memory:'));
+    const { logger, lines, raw } = capture('info');
+    const mirror = createSheetMirror(sheetConfig(), repos, logger, fakeClient(google403));
+    mirror.scheduleSync();
+    for (let i = 0; i < 100 && lines.length === 0; i++) await new Promise((r) => setTimeout(r, 20));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 'warn', event: 'sheet_sync_failed', trigger: 'change' });
+    expect(lines[0]!.err.message).toContain('403');
+    expect(lines[0]!.err.message).toContain('<email>'); // describeError named the account: replaced
+    expect(raw.join('')).not.toContain(SA_EMAIL);
+    expect(mirror.status().lastError).toContain(SA_EMAIL); // the admin page still shows it (owner-only)
+  });
+});
+
+describe('config lines', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reconfigureLog re-reads the level and the version (a local .env is loaded after import)', () => {
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => (out.push(String(s)), true));
+    const before = { ...log };
+    try {
+      reconfigureLog({ LOG_LEVEL: 'warn', APP_VERSION: 'v7.7.7' });
+      expect(log.level).toBe('warn');
+      log.info('hidden', 'below warn');
+      log.warn('shown', 'at warn');
+    } finally {
+      Object.assign(log, before);
+      vi.restoreAllMocks();
+    }
+    const lines = out.join('').split('\n').filter(Boolean).map((s) => JSON.parse(s) as Line);
+    expect(lines.map((l) => l.event)).toEqual(['shown']);
+    expect(lines[0]).toMatchObject({ version: 'v7.7.7' });
+  });
+
+  it('a missing secret outside production: one config_ephemeral_secret warn line with the name, never a value', () => {
+    const out: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((s) => (out.push(String(s)), true));
+    const config = loadConfig({ NODE_ENV: 'development', SESSION_KEY: 'b'.repeat(32), DB_PATH: ':memory:' });
+    vi.restoreAllMocks();
+    const lines = out.join('').split('\n').filter(Boolean).map((s) => JSON.parse(s) as Line);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ level: 'warn', event: 'config_ephemeral_secret', name: 'APP_PEPPER' });
+    expect(out.join('')).not.toContain(config.appPepper);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// The production process: Fastify's own logger (raw URL + client IP on every request) must stay off.
+
+describe('server process (production)', () => {
+  it('every stdout line is ours: no raw path, no query, no IP, no e-mail; the boot sheet sync logs its failure', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'storalex-prod-'));
+    const entry = path.resolve('src/server/index.ts');
+    const tsx = pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href;
+    const port = await freePort();
+    const child = spawn(process.execPath, ['--import', tsx, entry], {
+      cwd: dir,
+      env: {
+        PATH: process.env.PATH,
+        NODE_ENV: 'production',
+        HOST: '127.0.0.1',
+        PORT: String(port),
+        DATA_DIR: dir,
+        APP_PEPPER: 'pepper-value-'.padEnd(40, 'p'),
+        SESSION_KEY: 'session-value-'.padEnd(40, 's'),
+        APP_VERSION: 'v1.2.3-prod',
+        LOG_LEVEL: 'info',
+        SHEET_ID: 'sheet-id-123',
+        GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, // unusable key: the boot sync fails without leaving the machine
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (err += d));
+    const lines = () =>
+      out
+        .split('\n')
+        .filter(Boolean)
+        .map((s) => JSON.parse(s) as Line);
+    const until = async (pred: () => boolean, what: string) => {
+      for (let i = 0; i < 300 && !pred(); i++) await new Promise((r) => setTimeout(r, 50));
+      if (!pred()) throw new Error(`timeout waiting for ${what}: stdout=${out} stderr=${err}`);
+    };
+    try {
+      await until(() => lines().some((l) => l.event === 'startup'), 'startup');
+      const start = lines().find((l) => l.event === 'startup')!;
+      expect(start).toMatchObject({ env: 'production', version: 'v1.2.3-prod', port, sheet_mirror: true });
+      const addr = port;
+      const res = await fetch(`http://127.0.0.1:${addr}/api/items?q=needle-query-xyz`);
+      expect(res.status).toBe(401);
+      const login = await fetch(`http://127.0.0.1:${addr}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'nobody', password: 'wrong-password' }),
+      });
+      expect(login.status).toBeGreaterThanOrEqual(400);
+      await until(() => lines().some((l) => l.event === 'auth_refused'), 'auth_refused');
+      await until(() => lines().some((l) => l.event === 'sheet_sync_failed'), 'sheet_sync_failed');
+      expect(lines().find((l) => l.event === 'sheet_sync_failed')).toMatchObject({ level: 'warn', trigger: 'boot' });
+      for (const l of lines()) expect(l.service).toBe('storalex');
+      expect(out).not.toContain('needle-query-xyz');
+      expect(out).not.toContain('/api/items');
+      expect(out).not.toContain('127.0.0.1');
+      expect(out).not.toContain(SA_EMAIL);
+      expect(out).not.toContain('pepper-value');
+      child.kill('SIGTERM');
+      expect(await new Promise<number | null>((r) => child.on('exit', r))).toBe(0);
+      expect(lines().at(-1)).toMatchObject({ event: 'shutdown', signal: 'SIGTERM' });
+    } finally {
+      child.kill('SIGKILL');
+    }
+  }, 30_000);
+});
+
+/** A free TCP port on 127.0.0.1. */
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(port));
+    });
+  });
+}
